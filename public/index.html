@@ -241,12 +241,23 @@
     .status-done{color:var(--st-done)}
     .status-failed{color:var(--st-failed)}
     .status-wait{color:var(--st-queued)}
-    pre,.markdown{
+    pre{
       background:var(--bg);
       border:1px solid var(--border);
       padding:10px;
       border-radius:var(--radius-lg);
       white-space:pre-wrap;
+      overflow-wrap:break-word;
+      font-size:12px;
+      max-height:310px;
+      overflow:auto;
+    }
+    .markdown{
+      background:var(--bg);
+      border:1px solid var(--border);
+      padding:10px;
+      border-radius:var(--radius-lg);
+      white-space:normal;
       overflow-wrap:break-word;
       font-size:12px;
       max-height:310px;
@@ -258,6 +269,11 @@
     .markdown li{margin:3px 0}
     .markdown code{background:var(--surface-hover);padding:1px 4px;border-radius:4px;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px}
     .markdown strong{font-weight:600;color:var(--text)}
+    .md-table-wrap{overflow-x:auto;margin:8px 0;-webkit-overflow-scrolling:touch}
+    .md-table{width:100%;border-collapse:collapse;font-size:inherit;white-space:normal}
+    .md-table th,.md-table td{border:1px solid var(--border);padding:6px 10px;text-align:left;vertical-align:top;line-height:1.45}
+    .md-table th{background:var(--surface-2);font-weight:600;color:var(--text)}
+    .md-table tbody tr:nth-child(even) td{background:color-mix(in srgb,var(--surface-2) 35%,transparent)}
     .rules-modal-panel{display:flex;flex-direction:column;overflow:hidden}
     .rules-modal-header{padding:18px 18px 12px;border-bottom:1px solid var(--border)}
     .rules-modal-header h3{margin:0 0 4px}
@@ -426,13 +442,15 @@
     .log-chunk{white-space:pre-wrap;overflow-wrap:break-word;margin:0}
     .log-chunk+.log-chunk{margin-top:8px;padding-top:8px;border-top:1px dashed var(--border)}
     .log-chunk-thinking{color:var(--st-complex);border-left:2px solid var(--st-complex);padding-left:8px}
-    .log-chunk-message{color:var(--text);line-height:1.5}
+    .log-chunk-message{color:var(--text);line-height:1.5;white-space:normal}
     .log-chunk-message h1,.log-chunk-message h2,.log-chunk-message h3{margin:10px 0 4px;font-size:13px}
     .log-chunk-message p{margin:4px 0}
     .log-chunk-message ul{margin:4px 0 4px 18px;padding:0}
     .log-chunk-message li{margin:2px 0}
     .log-chunk-message code{background:var(--surface-hover);padding:1px 4px;border-radius:4px;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px}
     .log-chunk-message strong{font-weight:600;color:var(--text)}
+    .log-chunk-message .md-table-wrap,.summary-box .md-table-wrap{margin:6px 0}
+    .summary-box.markdown{white-space:normal}
     .log-chunk-system{color:var(--st-queued);font-size:11px;white-space:pre-wrap}
     .task-detail-close{padding:4px 10px;font-size:12px;flex-shrink:0}
     .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:110;display:flex;align-items:center;justify-content:center;padding:16px}

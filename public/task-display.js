@@ -123,10 +123,41 @@
     return result;
   }
 
+  function parseTableRow(line) {
+    let trimmed = String(line ?? '').trim();
+    if (trimmed.startsWith('|')) trimmed = trimmed.slice(1);
+    if (trimmed.endsWith('|')) trimmed = trimmed.slice(0, -1);
+    return trimmed.split('|').map((cell) => cell.trim());
+  }
+
+  function isTableRow(line) {
+    const trimmed = String(line ?? '').trim();
+    if (!trimmed.includes('|')) return false;
+    return parseTableRow(trimmed).length >= 2;
+  }
+
+  function isTableSeparator(line) {
+    const cells = parseTableRow(line);
+    return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+  }
+
+  function renderTableRow(cells, tag) {
+    return `<tr>${cells.map((cell) => `<${tag}>${formatInlineMarkdown(cell)}</${tag}>`).join('')}</tr>`;
+  }
+
+  function renderTable(headerCells, bodyRows) {
+    const thead = `<thead>${renderTableRow(headerCells, 'th')}</thead>`;
+    const tbody = bodyRows.length
+      ? `<tbody>${bodyRows.map((row) => renderTableRow(row, 'td')).join('')}</tbody>`
+      : '';
+    return `<div class="md-table-wrap"><table class="md-table">${thead}${tbody}</table></div>`;
+  }
+
   function formatMarkdown(value) {
     const lines = String(value ?? '').split(/\r?\n/);
     const parts = [];
     let listOpen = false;
+    let index = 0;
 
     const closeList = () => {
       if (listOpen) {
@@ -135,21 +166,41 @@
       }
     };
 
-    for (const rawLine of lines) {
+    while (index < lines.length) {
+      const rawLine = lines[index];
       const line = rawLine.replace(/\s+$/, '');
+
+      if (isTableRow(line) && index + 1 < lines.length && isTableSeparator(lines[index + 1])) {
+        closeList();
+        const headerCells = parseTableRow(line);
+        index += 2;
+        const bodyRows = [];
+        while (index < lines.length) {
+          const bodyLine = lines[index].replace(/\s+$/, '');
+          if (!isTableRow(bodyLine) || isTableSeparator(bodyLine)) break;
+          bodyRows.push(parseTableRow(bodyLine));
+          index += 1;
+        }
+        parts.push(renderTable(headerCells, bodyRows));
+        continue;
+      }
+
       if (/^###\s+/.test(line)) {
         closeList();
         parts.push(`<h3>${formatInlineMarkdown(line.replace(/^###\s+/, ''))}</h3>`);
+        index += 1;
         continue;
       }
       if (/^##\s+/.test(line)) {
         closeList();
         parts.push(`<h2>${formatInlineMarkdown(line.replace(/^##\s+/, ''))}</h2>`);
+        index += 1;
         continue;
       }
       if (/^#\s+/.test(line)) {
         closeList();
         parts.push(`<h1>${formatInlineMarkdown(line.replace(/^#\s+/, ''))}</h1>`);
+        index += 1;
         continue;
       }
       if (/^[-*]\s+/.test(line)) {
@@ -158,12 +209,14 @@
           listOpen = true;
         }
         parts.push(`<li>${formatInlineMarkdown(line.replace(/^[-*]\s+/, ''))}</li>`);
+        index += 1;
         continue;
       }
       closeList();
       if (line.trim()) {
         parts.push(`<p>${formatInlineMarkdown(line)}</p>`);
       }
+      index += 1;
     }
     closeList();
     return parts.join('');

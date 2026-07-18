@@ -138,6 +138,32 @@ test('formatMarkdown 支持标题、列表与粗体', () => {
   assert.match(html, /<li>修改 index.html<\/li>/);
 });
 
+test('formatMarkdown 支持 GFM 表格', () => {
+  const md = [
+    '**变更摘要**',
+    '',
+    '| 文件 | 说明 |',
+    '| --- | --- |',
+    '| task-display.js | 表格解析 |',
+    '| index.html | 表格样式 |',
+  ].join('\n');
+  const html = formatMarkdown(md);
+  assert.match(html, /<table class="md-table">/);
+  assert.match(html, /<th>文件<\/th>/);
+  assert.match(html, /<th>说明<\/th>/);
+  assert.match(html, /<td>task-display\.js<\/td>/);
+  assert.match(html, /<td>表格解析<\/td>/);
+  assert.doesNotMatch(html, /\| 文件 \|/);
+});
+
+test('renderLogChunksHtml 对 message 流渲染表格 Markdown', () => {
+  const md = '| 项 | 值 |\n| --- | --- |\n| 状态 | 完成 |';
+  const html = renderLogChunksHtml([{ stream: 'message', text: md }]);
+  assert.match(html, /log-chunk-message/);
+  assert.match(html, /<table class="md-table">/);
+  assert.match(html, /<td>完成<\/td>/);
+});
+
 test('mergeLogChunksForDisplay 合并同类型流式片段', () => {
   const merged = mergeLogChunksForDisplay([
     { stream: 'message', text: '**结论' },

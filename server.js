@@ -1,5 +1,6 @@
-const { openDb, createProjectRepo, createTaskRepo } = require('./db');
+const { openDb, createProjectRepo, createTaskRepo, createChatRepo } = require('./db');
 const TaskQueue = require('./queue');
+const ChatService = require('./chat-service');
 const { writePidFile, clearPidFile } = require('./deploy-restart');
 const ProjectDeployer = require('./project-deployer');
 const {
@@ -27,11 +28,13 @@ function main() {
 
   const db = openDb();
   const repo = createTaskRepo(db);
+  const chatRepo = createChatRepo(db);
   const projects = createProjectRepo(db);
   const machineProject = projects.ensureMachineProject();
   repo.assignUnscopedTasks(machineProject.id);
   projects.ensureDeployCommandForWorkdir(ROOT, 'npm run deploy');
   const recovered = repo.recoverStaleRunning();
+  const recoveredChats = chatRepo.recoverStaleRunning();
   const broadcaster = createBroadcaster();
   const queue = new TaskQueue({
     repo,
@@ -45,6 +48,13 @@ function main() {
     runner: queue.runner,
     broadcast: (event, data) => broadcaster.send(event, data),
   });
+  const chatService = new ChatService({
+    chatRepo,
+    projects,
+    config,
+    broadcast: (event, data) => broadcaster.send(event, data),
+    runner: queue.runner,
+  });
 
   const app = createApp({
     config,
@@ -53,6 +63,7 @@ function main() {
     projects,
     queue,
     projectDeployer,
+    chatService,
     broadcaster,
     root: ROOT,
   });
@@ -75,6 +86,7 @@ function main() {
     console.log(`  地址: http://${host}:${port}`);
     console.log('  访问保护: 已启用密码登录');
     console.log(`  恢复中断任务: ${recovered}`);
+    console.log(`  恢复中断对话: ${recoveredChats}`);
     console.log('========================================');
     console.log('');
     queue.kick();

@@ -5,7 +5,8 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const Database = require('better-sqlite3');
-const { ensureSchema, createProjectRepo, createTaskRepo } = require('../db');
+const { ensureSchema, createProjectRepo, createTaskRepo, createChatRepo } = require('../db');
+const ChatService = require('../chat-service');
 const { createApp } = require('../src/app');
 const { ROOT } = require('../src/config');
 const { createBroadcaster } = require('../src/sse/broadcaster');
@@ -14,6 +15,7 @@ function createTestDeps(overrides = {}) {
   const db = new Database(':memory:');
   ensureSchema(db);
   const repo = createTaskRepo(db);
+  const chatRepo = createChatRepo(db);
   const projects = createProjectRepo(db);
   projects.ensureMachineProject();
 
@@ -48,6 +50,21 @@ function createTestDeps(overrides = {}) {
   };
 
   const broadcaster = createBroadcaster();
+  const chatService = new ChatService({
+    chatRepo,
+    projects,
+    config,
+    broadcast: (event, data) => broadcaster.send(event, data),
+    runner: {
+      isTaskRunning: () => false,
+      runChatTurn: async () => ({
+        resultSummary: 'mock reply',
+        sessionId: 'mock-agent-session',
+      }),
+      submitInteraction: async () => {},
+      cancelTask: () => {},
+    },
+  });
   const queue = {
     currentTaskId: null,
     runningTaskIds: [],
@@ -76,11 +93,12 @@ function createTestDeps(overrides = {}) {
     projects,
     queue,
     projectDeployer,
+    chatService,
     broadcaster,
     root: ROOT,
   });
 
-  return { app, db, repo, projects, token, authService, config, broadcaster, queue };
+  return { app, db, repo, chatRepo, projects, token, authService, config, broadcaster, queue, chatService };
 }
 
 function request(app, method, urlPath, options = {}) {
@@ -301,5 +319,42 @@ test('GET /api/events 无 token 返回 401', async () => {
   const res = await request(app, 'GET', '/api/events');
   assert.equal(res.status, 401);
   assert.equal(res.json.error, 'Unauthorized');
+  db.close();
+});
+
+test('POST /api/chats 创建全局对话会话', async () => {
+  const { app, db, token } = createTestDeps();
+  const res = await request(app, 'POST', '/api/chats', {
+    token,
+    body: { projectId: null },
+  });
+  assert.equal(res.status, 201);
+  assert.equal(res.json.project_id, null);
+  assert.equal(res.json.status, 'idle');
+  assert.ok(res.json.id);
+  db.close();
+});
+
+test('GET /api/chats?projectId=global 返回全局会话列表', async () => {
+  const { app, db, token } = createTestDeps();
+  await request(app, 'POST', '/api/chats', { token, body: { projectId: null } });
+  const res = await request(app, 'GET', '/api/chats?projectId=global', { token });
+  assert.equal(res.status, 200);
+  assert.equal(res.json.length, 1);
+  db.close();
+});
+
+test('POST /api/chats/:id/messages 接受用户消息并返回 202', async () => {
+  const { app, db, token } = createTestDeps();
+  const created = await request(app, 'POST', '/api/chats', {
+    token,
+    body: { projectId: null },
+  });
+  const res = await request(app, 'POST', `/api/chats/${created.json.id}/messages`, {
+    token,
+    body: { message: '你好' },
+  });
+  assert.equal(res.status, 202);
+  assert.equal(res.json.status, 'running');
   db.close();
 });

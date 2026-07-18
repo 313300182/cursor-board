@@ -140,6 +140,33 @@ class AcpRunner {
     });
   }
 
+  runChatTurn({
+    chatSessionId,
+    workdir,
+    prompt,
+    attachments = [],
+    modelId,
+    resumeSessionId,
+    onEvent,
+  }) {
+    return this.withSession({
+      taskId: chatSessionId,
+      workdir,
+      modelId,
+      mode: 'ask',
+      resumeSessionId,
+      onEvent,
+      run: async (session) => {
+        await session.prompt(prompt, attachments);
+        const summary = session.getTurnSummary() || session.getSummary();
+        assertAgentResultSucceeded(summary);
+        return {
+          resultSummary: summary,
+        };
+      },
+    });
+  }
+
   runPipelineTask({
     taskId,
     workdir,
@@ -572,6 +599,8 @@ class AcpRunner {
           }
           if (mode === 'plan') {
             await send('session/set_mode', { sessionId, modeId: 'plan' });
+          } else if (mode === 'ask') {
+            await send('session/set_mode', { sessionId, modeId: 'ask' });
           }
           const result = await run(session);
           if (result && typeof result === 'object') {

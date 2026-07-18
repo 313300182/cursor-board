@@ -431,7 +431,8 @@
     .modal-panel .muted{margin-bottom:12px;font-size:12px}
     .modal-panel.modal-wide{width:min(640px,96vw)}
     .modal-panel.rules-modal-panel,
-    .modal-panel.task-detail-panel{
+    .modal-panel.task-detail-panel,
+    .modal-panel.chat-modal-panel{
       width:min(1200px,calc(100vw - 48px));
       max-height:min(90vh,900px);
       padding:0;
@@ -473,6 +474,39 @@
     .steer-panel textarea{min-height:72px;font-size:12px}
     .steer-panel .toolbar{margin:0;flex-wrap:wrap}
     .steer-panel .toolbar button{font-size:12px;padding:7px 10px}
+    .chat-modal-panel{display:flex;flex-direction:column;overflow:hidden}
+    .chat-modal-header{padding:18px 18px 12px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+    .chat-modal-header h3{margin:0 0 4px}
+    .chat-modal-header .muted{margin:0}
+    .chat-modal-body{display:grid;grid-template-columns:minmax(220px,280px) minmax(0,1fr);gap:0;min-height:0;flex:1;overflow:hidden}
+    .chat-session-list{border-right:1px solid var(--border);background:var(--surface-2);overflow:auto;min-height:0;padding:8px}
+    .chat-session-toolbar{padding:0 4px 8px;display:flex;gap:6px}
+    .chat-session-toolbar button{width:100%;font-size:12px;padding:7px 10px}
+    .chat-main{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+    .chat-messages{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:12px;min-height:0}
+    .chat-bubble{max-width:min(760px,92%);padding:10px 12px;border-radius:var(--radius-lg);border:1px solid var(--border);background:var(--surface-2)}
+    .chat-bubble.user{align-self:flex-end;background:var(--accent-subtle);border-color:color-mix(in srgb,var(--accent) 30%,transparent)}
+    .chat-bubble.assistant{align-self:flex-start}
+    .chat-bubble-label{font-size:10px;font-weight:600;color:var(--text-3);margin-bottom:6px;letter-spacing:.04em;text-transform:uppercase}
+    .chat-bubble .markdown,.chat-bubble .chat-text{font-size:13px;line-height:1.55}
+    .chat-bubble .markdown{max-height:none;background:transparent;border:none;padding:0}
+    .chat-bubble.streaming{border-color:color-mix(in srgb,var(--st-running) 35%,transparent)}
+    .chat-typing{display:inline-flex;gap:4px;align-items:center;padding:4px 0}
+    .chat-typing span{width:6px;height:6px;border-radius:50%;background:var(--text-3);animation:chatTyping 1.2s infinite ease-in-out}
+    .chat-typing span:nth-child(2){animation-delay:.15s}
+    .chat-typing span:nth-child(3){animation-delay:.3s}
+    @keyframes chatTyping{0%,80%,100%{opacity:.35;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
+    .chat-compose{border-top:1px solid var(--border);padding:12px 14px;display:flex;flex-direction:column;gap:8px;background:var(--surface)}
+    .chat-compose textarea{min-height:72px;max-height:180px;font-size:13px}
+    .chat-compose-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+    .chat-compose-actions button{font-size:12px;padding:7px 12px}
+    .chat-status-bar{font-size:11px;color:var(--text-3);padding:0 14px 10px}
+    .chat-interaction{margin-top:4px}
+    .chat-modal-actions{padding:12px 18px;border-top:1px solid var(--border);display:flex;justify-content:flex-end}
+    @media(max-width:760px){
+      .chat-modal-body{grid-template-columns:1fr}
+      .chat-session-list{border-right:none;border-bottom:1px solid var(--border);max-height:min(34vh,240px)}
+    }
     @media(max-width:1400px){.board{grid-template-columns:repeat(3,minmax(0,1fr))}}
     @media(max-width:900px){.board{grid-template-columns:repeat(2,minmax(0,1fr))}}
     @media(max-width:640px){.board{grid-template-columns:1fr}}
@@ -481,7 +515,8 @@
     @media(max-width:1250px){.project-layout{grid-template-columns:1fr}}
     @media(max-width:760px){
       .modal-panel.rules-modal-panel,
-      .modal-panel.task-detail-panel{width:min(100%,calc(100vw - 24px));max-height:92vh}
+      .modal-panel.task-detail-panel,
+      .modal-panel.chat-modal-panel{width:min(100%,calc(100vw - 24px));max-height:92vh}
       .rules-modal-body{grid-template-columns:1fr}
       .rules-list{border-right:none;border-bottom:1px solid var(--border);max-height:min(34vh,260px)}
       .rules-detail{min-height:min(42vh,360px)}
@@ -517,6 +552,7 @@
           <h1>项目</h1>
           <p class="muted">每个项目拥有独立串行队列，不同项目可并行执行。</p>
         </div>
+        <button type="button" id="openGlobalChatBtn">对话</button>
         <button type="button" id="openCreateProjectBtn" class="primary">新增项目</button>
       </div>
       <div id="projectGrid" class="project-grid"></div>
@@ -562,6 +598,7 @@
         <div class="toolbar" style="justify-content:space-between;margin-bottom:12px">
           <div><h2 id="projectHeading">任务看板</h2><div id="projectPath" class="muted"></div></div>
           <div class="toolbar">
+            <button type="button" id="projectChatBtn">项目对话</button>
             <button type="button" id="rulesBtn" class="hidden">Cursor Rules</button>
             <button type="button" id="skillsBtn" class="hidden">Cursor Skills</button>
             <button type="button" id="projectConfigBtn" class="hidden">项目配置</button>
@@ -742,7 +779,24 @@
     </div>
   </div>
 
+  <div id="chatModal" class="modal-backdrop hidden">
+    <div class="modal-panel chat-modal-panel" role="dialog" aria-labelledby="chatModalTitle">
+      <div class="chat-modal-header">
+        <div>
+          <h3 id="chatModalTitle">对话</h3>
+          <p id="chatModalSummary" class="muted">Ask 模式 · 多轮上下文</p>
+        </div>
+        <button type="button" id="chatModalCloseBtn" class="task-detail-close">关闭</button>
+      </div>
+      <div id="chatModalBody" class="chat-modal-body"></div>
+      <div class="chat-modal-actions">
+        <button type="button" id="chatModalFooterCloseBtn">关闭</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/task-display.js"></script>
+  <script src="/chat-display.js"></script>
   <script>
     const params = new URLSearchParams(location.search);
     const state = {
@@ -753,6 +807,15 @@
       selectedId: null, logChunks: {}, taskEvents: {}, models: { options: [] }, fieldImages: {},
       doneExpanded: false, archivedTasks: [], showArchived: false,
       iterateSourceId: null,
+      chat: {
+        scope: null,
+        projectId: null,
+        sessions: [],
+        activeSessionId: null,
+        messages: {},
+        streamChunks: {},
+        sessionsById: {},
+      },
       eventSource: null,
     };
     const $ = (id) => document.getElementById(id);
@@ -2024,6 +2087,289 @@
     }
     window.respondPlan=respondPlan;window.respondQuestions=respondQuestions;
 
+    window.respondPlan=respondPlan;window.respondQuestions=respondQuestions;
+
+    const {
+      renderMessageBubble,
+      renderStreamingBubble,
+      renderInteraction,
+      renderSessionListItem,
+    } = window.ChatDisplay;
+
+    function activeChatSession(){
+      return state.chat.sessionsById[state.chat.activeSessionId]||null;
+    }
+
+    function chatStatusText(session){
+      if(!session)return '';
+      if(session.status==='running')return 'Agent 正在回复…';
+      if(session.status==='awaiting_input')return '等待你的回答';
+      if(session.status==='failed')return session.error_message||'回复失败';
+      return 'Ask 模式 · 可直接提问';
+    }
+
+    function renderChatModal(){
+      const body=$('chatModalBody');
+      const title=$('chatModalTitle');
+      const summary=$('chatModalSummary');
+      if(!body||!title||!summary)return;
+      if(state.chat.scope==='global'){
+        title.textContent='自由对话';
+        summary.textContent='与 Agent 自由交流，不绑定任何项目 · Ask 模式';
+      }else{
+        title.textContent=`${state.project?.name||'项目'} · 对话`;
+        summary.textContent='围绕本项目代码与配置提问 · Ask 模式 · 多轮上下文';
+      }
+      const session=activeChatSession();
+      const messages=state.chat.messages[state.chat.activeSessionId]||[];
+      const streaming=session?.status==='running';
+      const streamHtml=streaming?renderStreamingBubble(state.chat.streamChunks[state.chat.activeSessionId]||[]):'';
+      const interactionHtml=session?.interaction?renderInteraction(session.interaction):'';
+      body.innerHTML=`
+        <div class="chat-session-list">
+          <div class="chat-session-toolbar">
+            <button type="button" id="chatNewSessionBtn" class="primary">新对话</button>
+          </div>
+          <div id="chatSessionList" role="listbox" aria-label="对话列表">
+            ${state.chat.sessions.map(item=>renderSessionListItem(item,item.id===state.chat.activeSessionId)).join('')||'<div class="rules-empty">暂无对话，点击「新对话」开始</div>'}
+          </div>
+        </div>
+        <div class="chat-main">
+          <div id="chatMessages" class="chat-messages">
+            ${messages.map(renderMessageBubble).join('')}
+            ${streamHtml}
+            ${interactionHtml}
+          </div>
+          <div id="chatStatusBar" class="chat-status-bar">${escapeHtml(chatStatusText(session))}</div>
+          <div class="chat-compose">
+            <textarea id="chatInput" placeholder="输入问题或想法，Enter 发送，Shift+Enter 换行" ${session&&(session.status==='running'||session.status==='awaiting_input')?'disabled':''}></textarea>
+            <div class="chat-compose-actions">
+              ${session?.status==='running'?'<button type="button" id="chatCancelBtn" class="danger">停止</button>':''}
+              <button type="button" id="chatSendBtn" class="primary" ${session&&(session.status==='running'||session.status==='awaiting_input')?'disabled':''}>发送</button>
+            </div>
+            <div id="chatError" class="error"></div>
+          </div>
+        </div>`;
+      body.querySelectorAll('[data-chat-session]').forEach(button=>{
+        button.onclick=()=>selectChatSession(button.dataset.chatSession);
+      });
+      $('chatNewSessionBtn')?.addEventListener('click',createChatSession);
+      $('chatSendBtn')?.addEventListener('click',sendChatMessage);
+      $('chatCancelBtn')?.addEventListener('click',cancelChatTurn);
+      body.querySelector('[data-chat-submit-interaction]')?.addEventListener('click',submitChatInteraction);
+      const input=$('chatInput');
+      if(input){
+        input.onkeydown=(event)=>{
+          if(event.key==='Enter'&&!event.shiftKey){
+            event.preventDefault();
+            sendChatMessage();
+          }
+        };
+        if(!session||!(session.status==='running'||session.status==='awaiting_input'))setTimeout(()=>input.focus(),0);
+      }
+      const box=$('chatMessages');
+      if(box)box.scrollTop=box.scrollHeight;
+    }
+
+    async function loadChatSessions(selectId){
+      const query=state.chat.scope==='global'?'global':state.chat.projectId;
+      state.chat.sessions=await api(`/api/chats?projectId=${query}`);
+      state.chat.sessionsById=Object.fromEntries(state.chat.sessions.map(item=>[item.id,item]));
+      if(selectId&&state.chat.sessionsById[selectId]){
+        state.chat.activeSessionId=selectId;
+      }else if(!state.chat.activeSessionId||!state.chat.sessionsById[state.chat.activeSessionId]){
+        state.chat.activeSessionId=state.chat.sessions[0]?.id||null;
+      }
+      if(state.chat.activeSessionId&&!state.chat.messages[state.chat.activeSessionId]){
+        await loadChatMessages(state.chat.activeSessionId);
+      }
+      renderChatModal();
+    }
+
+    async function loadChatMessages(sessionId){
+      const detail=await api(`/api/chats/${encodeURIComponent(sessionId)}`);
+      state.chat.messages[sessionId]=detail.messages||[];
+      state.chat.sessionsById[sessionId]=detail;
+      state.chat.sessions=state.chat.sessions.map(item=>item.id===sessionId?detail:item);
+      if(!state.chat.streamChunks[sessionId])state.chat.streamChunks[sessionId]=[];
+    }
+
+    async function openChat(scope,projectId=null){
+      state.chat.scope=scope;
+      state.chat.projectId=projectId;
+      state.chat.activeSessionId=null;
+      state.chat.messages={};
+      state.chat.streamChunks={};
+      $('chatError')&&($('chatError').textContent='');
+      $('chatModal').classList.remove('hidden');
+      await loadChatSessions();
+      if(!state.chat.sessions.length)await createChatSession();
+    }
+
+    function closeChat(){
+      $('chatModal').classList.add('hidden');
+      state.chat.scope=null;
+      state.chat.projectId=null;
+    }
+
+    async function createChatSession(){
+      $('chatError')&&($('chatError').textContent='');
+      const payload=state.chat.scope==='global'?{projectId:null}:{projectId:state.chat.projectId};
+      const session=await api('/api/chats',{method:'POST',body:JSON.stringify(payload)});
+      state.chat.sessions.unshift(session);
+      state.chat.sessionsById[session.id]=session;
+      state.chat.activeSessionId=session.id;
+      state.chat.messages[session.id]=[];
+      state.chat.streamChunks[session.id]=[];
+      renderChatModal();
+    }
+
+    async function selectChatSession(sessionId){
+      if(state.chat.activeSessionId===sessionId)return;
+      state.chat.activeSessionId=sessionId;
+      if(!state.chat.messages[sessionId])await loadChatMessages(sessionId);
+      renderChatModal();
+    }
+
+    async function sendChatMessage(){
+      const session=activeChatSession();
+      if(!session)return;
+      const input=$('chatInput');
+      const message=input?.value.trim()||'';
+      if(!message){
+        if($('chatError'))$('chatError').textContent='请输入消息';
+        return;
+      }
+      if($('chatError'))$('chatError').textContent='';
+      if($('chatSendBtn'))$('chatSendBtn').disabled=true;
+      try{
+        const updated=await api(`/api/chats/${encodeURIComponent(session.id)}/messages`,{
+          method:'POST',
+          body:JSON.stringify({message}),
+        });
+        state.chat.sessionsById[session.id]=updated;
+        state.chat.sessions=state.chat.sessions.map(item=>item.id===session.id?{...item,...updated}:item);
+        state.chat.streamChunks[session.id]=[];
+        if(input)input.value='';
+        await loadChatMessages(session.id);
+        renderChatModal();
+      }catch(error){
+        if($('chatError'))$('chatError').textContent=error.message;
+        if($('chatSendBtn'))$('chatSendBtn').disabled=false;
+      }
+    }
+
+    async function cancelChatTurn(){
+      const session=activeChatSession();
+      if(!session)return;
+      try{
+        const updated=await api(`/api/chats/${encodeURIComponent(session.id)}/cancel`,{method:'POST'});
+        state.chat.sessionsById[session.id]=updated;
+        state.chat.sessions=state.chat.sessions.map(item=>item.id===session.id?{...item,...updated}:item);
+        state.chat.streamChunks[session.id]=[];
+        renderChatModal();
+      }catch(error){
+        if($('chatError'))$('chatError').textContent=error.message;
+      }
+    }
+
+    async function submitChatInteraction(){
+      const session=activeChatSession();
+      if(!session?.interaction)return;
+      const answers=Array.from(document.querySelectorAll('[data-chat-question]')).map(question=>({
+        questionId:question.dataset.chatQuestion,
+        selectedOptionIds:Array.from(question.querySelectorAll('input:checked')).map(input=>input.value),
+      }));
+      try{
+        const updated=await api(`/api/chats/${encodeURIComponent(session.id)}/interaction`,{
+          method:'POST',
+          body:JSON.stringify({answers}),
+        });
+        state.chat.sessionsById[session.id]=updated;
+        state.chat.sessions=state.chat.sessions.map(item=>item.id===session.id?{...item,...updated}:item);
+        renderChatModal();
+      }catch(error){
+        if($('chatError'))$('chatError').textContent=error.message;
+      }
+    }
+
+    function handleChatSse(eventName,payload){
+      if(!state.chat.scope)return;
+      const sessionId=payload.sessionId||payload.id;
+      if(state.chat.scope==='project'&&payload.project_id&&payload.project_id!==state.chat.projectId){
+        // ignore other projects
+      }
+      if(eventName==='chat:created'){
+        if(state.chat.scope==='global'&&!payload.project_id){
+          if(!state.chat.sessionsById[payload.id]){
+            state.chat.sessions.unshift(payload);
+            state.chat.sessionsById[payload.id]=payload;
+          }
+        }else if(state.chat.scope==='project'&&payload.project_id===state.chat.projectId){
+          if(!state.chat.sessionsById[payload.id]){
+            state.chat.sessions.unshift(payload);
+            state.chat.sessionsById[payload.id]=payload;
+          }
+        }
+        if(state.chat.scope&&$('chatModal')&&!$('chatModal').classList.contains('hidden'))renderChatModal();
+        return;
+      }
+      if(!sessionId)return;
+      const inScope=state.chat.sessionsById[sessionId]||state.chat.sessions.some(item=>item.id===sessionId);
+      if(!inScope&&eventName!=='chat:status')return;
+      if(eventName==='chat:status'||eventName==='chat:done'){
+        const patch=payload;
+        if(state.chat.sessionsById[sessionId]){
+          state.chat.sessionsById[sessionId]={...state.chat.sessionsById[sessionId],...patch};
+          state.chat.sessions=state.chat.sessions.map(item=>item.id===sessionId?{...item,...patch}:item);
+        }
+        if(eventName==='chat:done'){
+          state.chat.streamChunks[sessionId]=[];
+          if(payload.message){
+            state.chat.messages[sessionId]=state.chat.messages[sessionId]||[];
+            if(!state.chat.messages[sessionId].some(item=>item.id===payload.message.id)){
+              state.chat.messages[sessionId].push(payload.message);
+            }
+          }
+        }
+        if(state.chat.activeSessionId===sessionId&&$('chatModal')&&!$('chatModal').classList.contains('hidden'))renderChatModal();
+        return;
+      }
+      if(eventName==='chat:message'&&payload.message){
+        state.chat.messages[sessionId]=state.chat.messages[sessionId]||[];
+        const exists=state.chat.messages[sessionId].some(item=>item.id===payload.message.id);
+        if(!exists)state.chat.messages[sessionId].push(payload.message);
+        if(state.chat.activeSessionId===sessionId&&$('chatModal')&&!$('chatModal').classList.contains('hidden'))renderChatModal();
+        return;
+      }
+      if(eventName==='chat:log'&&payload.stream==='message'){
+        if(!state.chat.streamChunks[sessionId])state.chat.streamChunks[sessionId]=[];
+        state.chat.streamChunks[sessionId].push(payload.chunk||'');
+        if(state.chat.activeSessionId===sessionId&&$('chatModal')&&!$('chatModal').classList.contains('hidden')){
+          const box=$('chatMessages');
+          const streamEl=box?.querySelector('.chat-bubble.streaming .markdown,.chat-bubble.streaming .chat-text');
+          if(streamEl){
+            streamEl.innerHTML=markdown(state.chat.streamChunks[sessionId].join(''));
+            box.scrollTop=box.scrollHeight;
+          }else{
+            renderChatModal();
+          }
+        }
+        return;
+      }
+      if(eventName==='chat:interaction'){
+        if(state.chat.sessionsById[sessionId]){
+          state.chat.sessionsById[sessionId].interaction={
+            type:payload.type,
+            title:payload.title,
+            questions:payload.questions,
+          };
+          state.chat.sessionsById[sessionId].status='awaiting_input';
+        }
+        if(state.chat.activeSessionId===sessionId&&$('chatModal')&&!$('chatModal').classList.contains('hidden'))renderChatModal();
+      }
+    }
+
     function connectSse(){
       state.eventSource?.close();
       const source=new EventSource(`/api/events?token=${encodeURIComponent(state.token)}`);
@@ -2056,6 +2402,11 @@
           const task=state.tasks.find(item=>item.id===payload.id);
           if(task)renderTaskRounds(task);
         }
+      });
+      ['chat:created','chat:status','chat:message','chat:log','chat:done','chat:interaction'].forEach(name=>{
+        source.addEventListener(name,event=>{
+          handleChatSse(name,JSON.parse(event.data));
+        });
       });
     }
 
@@ -2100,6 +2451,12 @@
         $('iterateModal').onclick=(event)=>{
           if(event.target===$('iterateModal'))closeIterateModal();
         };
+        $('projectChatBtn').onclick=()=>openChat('project',state.projectId);
+        $('chatModalCloseBtn').onclick=closeChat;
+        $('chatModalFooterCloseBtn').onclick=closeChat;
+        $('chatModal').onclick=(event)=>{
+          if(event.target===$('chatModal'))closeChat();
+        };
         $('addProjectWorkdirEditorBtn').onclick=()=>{
           bindWorkdirList(
             $('projectWorkdirsEditor'),
@@ -2113,6 +2470,12 @@
         await loadProject();
       }else{
         $('openCreateProjectBtn').onclick=openCreateProjectModal;
+        $('openGlobalChatBtn').onclick=()=>openChat('global');
+        $('chatModalCloseBtn').onclick=closeChat;
+        $('chatModalFooterCloseBtn').onclick=closeChat;
+        $('chatModal').onclick=(event)=>{
+          if(event.target===$('chatModal'))closeChat();
+        };
         $('createProjectForm').onsubmit=createProject;
         $('createProjectCancelBtn').onclick=closeCreateProjectModal;
         $('createProjectModal').onclick=(event)=>{

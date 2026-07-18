@@ -62,6 +62,31 @@ function ensureSchema(db) {
     );
     CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
     CREATE INDEX IF NOT EXISTS idx_task_events_task_id ON task_events(task_id);
+    CREATE TABLE IF NOT EXISTS chat_sessions (
+      id TEXT PRIMARY KEY,
+      project_id TEXT,
+      title TEXT NOT NULL DEFAULT '新对话',
+      workdir TEXT NOT NULL,
+      agent_session_id TEXT,
+      model_id TEXT,
+      status TEXT NOT NULL DEFAULT 'idle',
+      interaction_json TEXT,
+      error_message TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id)
+    );
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      content TEXT NOT NULL DEFAULT '',
+      stream TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (session_id) REFERENCES chat_sessions(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_chat_sessions_project_id ON chat_sessions(project_id);
+    CREATE INDEX IF NOT EXISTS idx_chat_messages_session_id ON chat_messages(session_id);
   `);
   ensureColumn(db, 'tasks', 'project_id', 'TEXT');
   ensureColumn(db, 'tasks', 'is_complex', 'INTEGER NOT NULL DEFAULT 0');
@@ -602,6 +627,153 @@ function createTaskRepo(db) {
   };
 }
 
+function mapChatSession(row) {
+  if (!row) return null;
+  return {
+    ...row,
+    interaction: row.interaction_json ? JSON.parse(row.interaction_json) : null,
+  };
+}
+
+function mapChatMessage(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    session_id: row.session_id,
+    role: row.role,
+    content: row.content,
+    stream: row.stream || null,
+    created_at: row.created_at,
+  };
+}
+
+function createChatRepo(db) {
+  const insertSession = db.prepare(`
+    INSERT INTO chat_sessions (
+      id, project_id, title, workdir, agent_session_id, model_id, status, created_at, updated_at
+    ) VALUES (
+      @id, @project_id, @title, @workdir, @agent_session_id, @model_id, @status, @created_at, @updated_at
+    )
+  `);
+
+  const insertMessage = db.prepare(`
+    INSERT INTO chat_messages (session_id, role, content, stream, created_at)
+    VALUES (@session_id, @role, @content, @stream, @created_at)
+  `);
+
+  return {
+    createSession(session) {
+      insertSession.run({
+        id: session.id,
+        project_id: session.project_id || null,
+        title: session.title || '新对话',
+        workdir: session.workdir,
+        agent_session_id: session.agent_session_id || null,
+        model_id: session.model_id || null,
+        status: session.status || 'idle',
+        created_at: session.created_at,
+        updated_at: session.updated_at,
+      });
+      return this.getSession(session.id);
+    },
+
+    getSession(id) {
+      return mapChatSession(db.prepare('SELECT * FROM chat_sessions WHERE id = ?').get(id));
+    },
+
+    listSessions(projectId) {
+      if (projectId === null || projectId === undefined) {
+        return db.prepare(`
+          SELECT * FROM chat_sessions
+          WHERE project_id IS NULL
+          ORDER BY updated_at DESC
+        `).all().map(mapChatSession);
+      }
+      return db.prepare(`
+        SELECT * FROM chat_sessions
+        WHERE project_id = ?
+        ORDER BY updated_at DESC
+      `).all(projectId).map(mapChatSession);
+    },
+
+    updateSession(id, patch) {
+      const assignments = [];
+      const values = { id };
+      if (Object.prototype.hasOwnProperty.call(patch, 'title')) {
+        assignments.push('title = @title');
+        values.title = patch.title;
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, 'agent_session_id')) {
+        assignments.push('agent_session_id = @agent_session_id');
+        values.agent_session_id = patch.agent_session_id;
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, 'status')) {
+        assignments.push('status = @status');
+        values.status = patch.status;
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, 'error_message')) {
+        assignments.push('error_message = @error_message');
+        values.error_message = patch.error_message;
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, 'updated_at')) {
+        assignments.push('updated_at = @updated_at');
+        values.updated_at = patch.updated_at;
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, 'interaction')) {
+        assignments.push('interaction_json = @interaction_json');
+        values.interaction_json = patch.interaction ? JSON.stringify(patch.interaction) : null;
+      }
+      if (!assignments.length) return this.getSession(id);
+      db.prepare(`UPDATE chat_sessions SET ${assignments.join(', ')} WHERE id = @id`).run(values);
+      return this.getSession(id);
+    },
+
+    setInteraction(id, interaction) {
+      db.prepare('UPDATE chat_sessions SET interaction_json = ? WHERE id = ?')
+        .run(interaction ? JSON.stringify(interaction) : null, id);
+      return this.getSession(id);
+    },
+
+    addMessage(sessionId, message) {
+      const now = message.created_at || new Date().toISOString();
+      const result = insertMessage.run({
+        session_id: sessionId,
+        role: message.role,
+        content: message.content || '',
+        stream: message.stream || null,
+        created_at: now,
+      });
+      db.prepare('UPDATE chat_sessions SET updated_at = ? WHERE id = ?').run(now, sessionId);
+      return this.getMessage(result.lastInsertRowid);
+    },
+
+    getMessage(id) {
+      return mapChatMessage(db.prepare('SELECT * FROM chat_messages WHERE id = ?').get(id));
+    },
+
+    listMessages(sessionId) {
+      return db.prepare(`
+        SELECT * FROM chat_messages
+        WHERE session_id = ?
+        ORDER BY id ASC
+      `).all(sessionId).map(mapChatMessage);
+    },
+
+    recoverStaleRunning() {
+      const now = new Date().toISOString();
+      const stale = db.prepare("SELECT id FROM chat_sessions WHERE status = 'running'").all();
+      for (const row of stale) {
+        this.updateSession(row.id, {
+          status: 'idle',
+          error_message: '服务重启，对话中断',
+          updated_at: now,
+        });
+      }
+      return stale.length;
+    },
+  };
+}
+
 module.exports = {
   DATA_DIR,
   ensureDataDir,
@@ -609,6 +781,7 @@ module.exports = {
   openDb,
   createProjectRepo,
   createTaskRepo,
+  createChatRepo,
   normalizeWorkdirs,
   parseProjectWorkdirs,
   parseTaskWorkdirs,

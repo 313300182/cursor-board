@@ -151,7 +151,7 @@ class TaskQueue {
     const isComplex = Boolean(input.isComplex);
     const title = deriveTaskTitle(template, variables, input.title);
     if (isComplex && !String(input.title || '').trim() && title === (template?.name || '未命名任务')) {
-      throw new Error('复杂任务请填写标题，或补充任务描述');
+      throw new Error('Plan 模式请填写标题，或补充任务描述');
     }
 
     const promptRendered = renderTemplate(template, {
@@ -162,8 +162,9 @@ class TaskQueue {
     const pipelineMode = Boolean(
       input.pipelineMode ?? isPipelineTemplate(template),
     );
+    const gitCommitRequested = input.gitCommit !== false && (input.gitCommit ?? true);
     const gitCommit = Boolean(
-      input.gitCommit && project.git_enabled && pipelineMode,
+      pipelineMode && project.git_enabled && gitCommitRequested,
     );
     const modelId = resolveTaskModel(
       this.config,
@@ -336,11 +337,11 @@ class TaskQueue {
   async runTask(task) {
     const startedAt = new Date().toISOString();
     const initialStatus = task.pipeline_mode
-      ? 'developing'
+      ? (task.is_complex ? 'planning' : 'developing')
       : (task.is_complex ? 'planning' : 'running');
     let current = this.repo.updateStatus(task.id, {
       status: initialStatus,
-      pipeline_phase: task.pipeline_mode ? 'dev' : null,
+      pipeline_phase: task.pipeline_mode && !task.is_complex ? 'dev' : null,
       started_at: startedAt,
       error_message: null,
     });
@@ -411,6 +412,7 @@ class TaskQueue {
         ? await this.runner.runTask({
           ...runnerOptions,
           mode: 'pipeline',
+          planMode: Boolean(task.is_complex),
           testCommand: task.variables?.test_command,
           gitCommit,
           gitPush,
@@ -477,9 +479,15 @@ class TaskQueue {
     }
 
     await this.runner.submitInteraction(id, input);
-    const status = task.status === 'pending_approval' && input.accepted ? 'running' : 'planning';
+    const approved = task.status === 'pending_approval' && input.accepted;
+    const status = approved
+      ? (task.pipeline_mode ? 'developing' : 'running')
+      : 'planning';
     this.repo.setInteraction(id, null);
-    const updated = this.repo.updateStatus(id, { status });
+    const updated = this.repo.updateStatus(id, {
+      status,
+      pipeline_phase: approved && task.pipeline_mode ? 'dev' : task.pipeline_phase,
+    });
     this.repo.addEvent(id, 'interaction_response', input);
     this.repo.addEvent(id, 'status_change', { status });
     this.broadcast('task:status', updated);

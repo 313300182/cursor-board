@@ -178,6 +178,7 @@ class AcpRunner {
     gitCommit = false,
     gitPush = false,
     taskTitle = '',
+    planMode = false,
     resumeSessionId,
     onEvent,
   }) {
@@ -185,7 +186,7 @@ class AcpRunner {
       taskId,
       workdir,
       modelId,
-      mode: 'agent',
+      mode: planMode ? 'plan' : 'agent',
       resumeSessionId,
       onEvent,
       run: async (session) => {
@@ -196,8 +197,20 @@ class AcpRunner {
           if (onEvent) onEvent('phase', { phase, ...extra });
         };
 
-        emitPhase('dev');
-        await session.prompt(appendDevSuffix(prompt, workdirs), attachments);
+        if (planMode) {
+          await session.prompt(appendTitleSuffix(prompt), attachments);
+          if (!session.context.planAccepted) {
+            throw new Error('Plan 模式未生成可批准的计划');
+          }
+          emitPhase('dev');
+          await session.prompt([
+            '计划已经批准。现在切换到执行模式，严格按照已批准的计划完成开发，并在完成后汇报结果。',
+            appendDevSuffix('', workdirs).trim(),
+          ].join('\n'));
+        } else {
+          emitPhase('dev');
+          await session.prompt(appendDevSuffix(prompt, workdirs), attachments);
+        }
         const devSummary = session.getTurnSummary();
         const suggestedTitle = parseTaskTitleMarker(devSummary);
         if (suggestedTitle) {

@@ -582,7 +582,7 @@
         </div>
         <div id="titleInputGroup" class="hidden">
           <label>标题 <span class="muted">(可选，留空则自动总结)</span></label>
-          <input id="titleInput" placeholder="复杂任务建议填写标题" />
+          <input id="titleInput" placeholder="Plan 模式建议填写标题" />
         </div>
         <div id="workdirGroup"><label>工作目录</label><input id="workdirInput" placeholder="本机任务必须指定目录" /></div>
         <div id="taskWorkdirGroup" class="hidden"><label>工作目录 <span class="muted">(可多选，适合前后端联动)</span></label><div id="taskWorkdirChecks" class="workdir-check-list"></div></div>
@@ -593,16 +593,12 @@
           <div id="templatePicker" class="template-picker-body"></div>
         </details>
         <div class="switch-row">
-          <div><strong>流水线</strong><div class="muted" style="font-size:11px">开发 → 测试 → Git 提交 → 等待项目部署</div></div>
-          <label class="switch"><input id="pipelineInput" type="checkbox"><span class="slider"></span></label>
+          <div><strong>Plan 模式</strong><div class="muted" style="font-size:11px">开启后先规划，批准后再继续开发、测试与部署</div></div>
+          <label class="switch"><input id="planInput" type="checkbox"><span class="slider"></span></label>
         </div>
         <div id="gitCommitRow" class="switch-row hidden">
-          <div><strong>提交 Git</strong><div class="muted" style="font-size:11px">测试通过后自动 commit（可选 push）</div></div>
-          <label class="switch"><input id="gitCommitInput" type="checkbox"><span class="slider"></span></label>
-        </div>
-        <div class="switch-row">
-          <div><strong>复杂任务</strong><div class="muted" style="font-size:11px">开启后先 Plan，再确认执行</div></div>
-          <label class="switch"><input id="complexInput" type="checkbox"><span class="slider"></span></label>
+          <div><strong>Git</strong><div class="muted" style="font-size:11px">测试通过后自动 commit，并按项目设置 push</div></div>
+          <label class="switch"><input id="gitCommitInput" type="checkbox" checked><span class="slider"></span></label>
         </div>
         <label>执行模型</label><select id="modelSelect"></select>
         <button id="createTaskBtn" class="primary" style="width:100%;margin-top:14px">提交到项目队列</button>
@@ -678,7 +674,7 @@
       <button type="button" id="addProjectWorkdirBtn" style="width:100%;margin-top:8px">添加目录</button>
       <label for="projectDeployCommand">部署命令 <span class="muted">(可选)</span></label><input id="projectDeployCommand" placeholder="例如：npm run deploy" />
       <div class="switch-row">
-        <div><strong>Git 关联</strong><div class="muted" style="font-size:11px">启用后流水线任务可提交代码</div></div>
+        <div><strong>Git 关联</strong><div class="muted" style="font-size:11px">启用后任务测试通过可自动提交代码</div></div>
         <label class="switch"><input id="projectGitEnabled" type="checkbox"><span class="slider"></span></label>
       </div>
       <div id="projectGitPushRow" class="switch-row hidden">
@@ -709,7 +705,7 @@
       <div class="modal-section">
         <h4>Git 关联</h4>
         <div class="switch-row" style="margin-top:0">
-          <div><strong>启用 Git</strong><div class="muted" style="font-size:11px">启用后流水线任务可提交代码</div></div>
+          <div><strong>启用 Git</strong><div class="muted" style="font-size:11px">启用后任务测试通过可自动提交代码</div></div>
           <label class="switch"><input id="projectGitEnabledEditor" type="checkbox"><span class="slider"></span></label>
         </div>
         <div id="projectGitPushEditorWrap" class="switch-row hidden">
@@ -759,11 +755,11 @@
   <div id="iterateModal" class="modal-backdrop hidden">
     <div class="modal-panel" role="dialog" aria-labelledby="iterateModalTitle">
       <h3 id="iterateModalTitle">迭代任务</h3>
-      <p class="muted">基于当前任务的对话上下文继续优化，将自动继承原任务的模型与流水线设置，不会新建任务卡片。</p>
+      <p class="muted">基于当前任务的对话上下文继续优化，将自动继承原任务的模型与执行设置，不会新建任务卡片。</p>
       <label for="iterateRequirement">优化需求</label>
       <textarea id="iterateRequirement" rows="8" placeholder="描述要优化或改进的内容、验收标准等"></textarea>
       <div id="iterateGitCommitRow" class="switch-row hidden">
-        <div><strong>提交 Git</strong><div class="muted" style="font-size:11px">测试通过后自动 commit（可选 push）</div></div>
+        <div><strong>Git</strong><div class="muted" style="font-size:11px">测试通过后自动 commit，并按项目设置 push</div></div>
         <label class="switch"><input id="iterateGitCommitInput" type="checkbox" checked><span class="slider"></span></label>
       </div>
       <div id="iterateGitPushRow" class="switch-row hidden">
@@ -892,7 +888,7 @@
         $('loginPassword').value='';
         await startBoard();
       }catch(error){
-        $('loginError').textContent=error.message;
+        showLogin(error.message||'登录失败');
       }finally{
         button.disabled=false;
       }
@@ -947,7 +943,7 @@
     }
 
     function renderModelOptions(){
-      const defaultId=$('complexInput').checked?state.models.complexDefault:state.models.simpleDefault;
+      const defaultId=$('planInput').checked?state.models.complexDefault:state.models.simpleDefault;
       $('modelSelect').innerHTML=
         `<option value="">默认：${escapeHtml(modelName(defaultId))}</option>`+
         state.models.options.map(item=>`<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join('');
@@ -1000,6 +996,14 @@
       });
     }
 
+    function isPipelineTemplate(template){
+      return Boolean(template?.pipeline||template?.category==='开发');
+    }
+
+    function selectedPipelineMode(){
+      return isPipelineTemplate(selectedTemplate());
+    }
+
     function syncTemplateSelection(){
       const current=$('templateSelect').value;
       document.querySelectorAll('[data-template]').forEach(card=>{
@@ -1008,13 +1012,7 @@
       const template=selectedTemplate();
       const summary=$('templateSummary');
       if(summary)summary.textContent=template?.name||'未选择';
-      if(template?.pipeline||template?.category==='开发'){
-        $('pipelineInput').checked=true;
-        $('complexInput').checked=false;
-        $('complexInput').disabled=true;
-      }else{
-        $('complexInput').disabled=false;
-      }
+      renderGitCommitOptions();
       updateTitlePreview();
     }
 
@@ -1182,10 +1180,10 @@
       const template=selectedTemplate();
       const preview=$('titlePreview');
       if(!preview)return;
-      const isComplex=$('complexInput').checked&&!$('pipelineInput').checked;
-      $('titlePreviewGroup').classList.toggle('hidden',isComplex);
-      $('titleInputGroup').classList.toggle('hidden',!isComplex);
-      if(isComplex)return;
+      const planMode=$('planInput').checked;
+      $('titlePreviewGroup').classList.toggle('hidden',planMode);
+      $('titleInputGroup').classList.toggle('hidden',!planMode);
+      if(planMode)return;
       const derived=deriveTaskTitle(template,collectVariables(),'');
       preview.textContent=derived;
     }
@@ -1193,15 +1191,17 @@
     function resetTaskForm(){
       $('titleInput').value='';
       $('workdirInput').value='';
-      $('complexInput').checked=false;
-      $('complexInput').disabled=false;
-      $('pipelineInput').checked=false;
-      $('gitCommitInput').checked=false;
+      $('planInput').checked=false;
+      if($('gitCommitInput')){
+        $('gitCommitInput').checked=true;
+        delete $('gitCommitInput').dataset.touched;
+      }
       state.fieldImages={};
       if(state.templates.length)$('templateSelect').value=defaultTemplateId();
       renderModelOptions();
       renderTemplateOptions();
       renderTemplateFields();
+      renderGitCommitOptions();
       updateTitlePreview();
     }
 
@@ -1249,7 +1249,6 @@
             <span class="badge model">${escapeHtml(modelName(task.model_id))}</span>
             ${phaseChip}${waitChip}${failChip}
             ${queueHead ? '<span class="badge queue-next">队首</span>' : ''}
-            ${task.pipeline_mode ? '<span class="badge pipeline">流水线</span>' : ''}
             ${task.git_commit ? '<span class="badge">Git</span>' : ''}
             ${task.is_complex ? '<span class="badge complex">复杂</span>' : ''}
             ${archivedBadge}
@@ -1596,9 +1595,11 @@
 
     function renderGitCommitOptions(){
       const enabled=Boolean(state.project?.git_enabled);
-      const pipeline=$('pipelineInput')?.checked||Boolean(selectedTemplate()?.pipeline||selectedTemplate()?.category==='开发');
+      const pipeline=selectedPipelineMode();
       $('gitCommitRow')?.classList.toggle('hidden',!enabled||!pipeline);
-      if(!enabled||!pipeline)$('gitCommitInput').checked=false;
+      if(enabled&&pipeline&&$('gitCommitInput')&&!$('gitCommitInput').dataset.touched){
+        $('gitCommitInput').checked=true;
+      }
     }
 
     function syncProjectGitEditorVisibility(){
@@ -1919,13 +1920,14 @@
       $('taskError').textContent='';
       try{
         const workdirs=state.project?.workdirs||[];
+        const pipelineMode=selectedPipelineMode();
         const payload={
           projectId:state.projectId,
-          title:$('complexInput').checked&&!$('pipelineInput').checked?$('titleInput').value.trim():'',
+          title:$('planInput').checked?$('titleInput').value.trim():'',
           template:$('templateSelect').value,
-          isComplex:$('complexInput').checked&&!$('pipelineInput').checked,
-          pipelineMode:$('pipelineInput').checked||Boolean(selectedTemplate()?.pipeline||selectedTemplate()?.category==='开发'),
-          gitCommit:$('gitCommitInput').checked,
+          isComplex:$('planInput').checked,
+          pipelineMode,
+          gitCommit:pipelineMode&&state.project?.git_enabled?$('gitCommitInput').checked:false,
           modelId:$('modelSelect').value||null,
           variables:collectVariables(),
           attachments:collectAttachments()
@@ -2181,12 +2183,10 @@
     }
     window.respondPlan=respondPlan;window.respondQuestions=respondQuestions;
 
-    window.respondPlan=respondPlan;window.respondQuestions=respondQuestions;
-
     const {
       renderMessageBubble,
       renderStreamingBubble,
-      renderInteraction,
+      renderInteraction: renderChatInteraction,
       renderSessionListItem,
     } = window.ChatDisplay;
 
@@ -2218,7 +2218,7 @@
       const messages=state.chat.messages[state.chat.activeSessionId]||[];
       const streaming=session?.status==='running';
       const streamHtml=streaming?renderStreamingBubble(state.chat.streamChunks[state.chat.activeSessionId]||[]):'';
-      const interactionHtml=session?.interaction?renderInteraction(session.interaction):'';
+      const interactionHtml=session?.interaction?renderChatInteraction(session.interaction):'';
       body.innerHTML=`
         <div class="chat-session-list">
           <div class="chat-session-toolbar">
@@ -2511,7 +2511,6 @@
 
     async function startBoard(){
       await bootstrap();
-      unlockBoard();
       connectSse();
       if(state.projectId){
         $('homeView').classList.add('hidden');$('projectView').classList.remove('hidden');$('homeBtn').classList.remove('hidden');
@@ -2558,8 +2557,8 @@
             [...collectWorkdirRows($('projectWorkdirsEditor')),{label:'',path:''}],
           );
         };
-        $('complexInput').onchange=()=>{if($('complexInput').checked)$('pipelineInput').checked=false;renderModelOptions();renderGitCommitOptions();updateTitlePreview();};
-        $('pipelineInput').onchange=()=>{if($('pipelineInput').checked){$('complexInput').checked=false;$('complexInput').disabled=true}else{$('complexInput').disabled=false}renderModelOptions();renderGitCommitOptions();updateTitlePreview();};
+        $('planInput').onchange=()=>{renderModelOptions();renderGitCommitOptions();updateTitlePreview();};
+        $('gitCommitInput')?.addEventListener('change',()=>{$('gitCommitInput').dataset.touched='1';});
         $('templateSelect').onchange=()=>{syncTemplateSelection();renderTemplateFields();renderGitCommitOptions();updateTitlePreview();};
         $('projectGitEnabledEditor').onchange=syncProjectGitEditorVisibility;
         await loadProject();
@@ -2586,6 +2585,7 @@
         $('projectGitEnabled').onchange=syncProjectGitPushVisibility;
         await loadHome();
       }
+      unlockBoard();
     }
 
     async function init(){

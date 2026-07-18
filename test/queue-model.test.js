@@ -118,12 +118,63 @@ function createQueue(projectOverrides = {}) {
   return { queue, getCreatedTask: () => createdTask };
 }
 
-test('创建任务时保存按复杂度解析后的默认模型', () => {
+function createQueueWithGit(projectOverrides = {}) {
+  let createdTask;
+  const projectWorkdirs = projectOverrides.workdirs || [{ label: '', path: process.cwd() }];
+  const repo = {
+    createTask(task) {
+      createdTask = {
+        ...task,
+        workdirs: task.workdirs || [{ label: '', path: task.workdir }],
+      };
+      return createdTask;
+    },
+    addEvent() {},
+    listTasks() {
+      return [];
+    },
+  };
+  const projects = {
+    getProject() {
+      return {
+        id: 'board',
+        type: 'normal',
+        workdir: projectWorkdirs[0]?.path || process.cwd(),
+        workdirs: projectWorkdirs,
+        git_enabled: true,
+        git_push: false,
+      };
+    },
+  };
+  const allowlist = projectOverrides.allowlist || [process.cwd(), path.dirname(process.cwd())];
+  const config = {
+    security: { workdirAllowlist: allowlist },
+    cursor: {
+      models: {
+        simpleDefault: 'luna-id',
+        complexDefault: 'opus-id',
+        options: [
+          { id: 'luna-id', name: 'Luna' },
+          { id: 'opus-id', name: 'Opus' },
+        ],
+      },
+    },
+  };
+  const queue = new TaskQueue({
+    repo,
+    projects,
+    config,
+    broadcast() {},
+  });
+  return { queue, getCreatedTask: () => createdTask };
+}
+
+test('创建任务时保存按 Plan 模式解析后的默认模型', () => {
   const { queue, getCreatedTask } = createQueue();
 
   queue.createTask({
     projectId: 'board',
-    title: '复杂任务',
+    title: 'Plan 任务',
     template: 'general',
     isComplex: true,
     variables: { description: '测试' },
@@ -171,6 +222,59 @@ test('开发类模板默认启用流水线', () => {
   });
 
   assert.equal(getCreatedTask().pipeline_mode, true);
+});
+
+test('通用模板默认不启用完整执行路径', () => {
+  const { queue, getCreatedTask } = createQueue();
+
+  queue.createTask({
+    projectId: 'board',
+    template: 'general',
+    variables: { description: '轻量任务' },
+  });
+
+  assert.equal(getCreatedTask().pipeline_mode, false);
+});
+
+test('启用 Git 的项目在流水线任务上默认勾选提交', () => {
+  const { queue, getCreatedTask } = createQueueWithGit();
+
+  queue.createTask({
+    projectId: 'board',
+    template: 'feature',
+    variables: { requirement: '新功能' },
+  });
+
+  assert.equal(getCreatedTask().pipeline_mode, true);
+  assert.equal(getCreatedTask().git_commit, true);
+});
+
+test('显式关闭 Git 时不提交', () => {
+  const { queue, getCreatedTask } = createQueueWithGit();
+
+  queue.createTask({
+    projectId: 'board',
+    template: 'feature',
+    gitCommit: false,
+    variables: { requirement: '新功能' },
+  });
+
+  assert.equal(getCreatedTask().git_commit, false);
+});
+
+test('Plan 模式可与流水线模板叠加', () => {
+  const { queue, getCreatedTask } = createQueue();
+
+  queue.createTask({
+    projectId: 'board',
+    title: 'Plan 开发',
+    template: 'feature',
+    isComplex: true,
+    variables: { requirement: '新功能' },
+  });
+
+  assert.equal(getCreatedTask().pipeline_mode, true);
+  assert.equal(getCreatedTask().is_complex, true);
 });
 
 test('简单任务未填标题时从描述自动生成', () => {

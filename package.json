@@ -7,7 +7,7 @@
     "start": "node server.js",
     "deploy": "node scripts/deploy-board.js",
     "probe": "node scripts/acp-probe.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test --test-concurrency=2 test/*.test.js"
   },
   "author": "Amadeus",
   "license": "MIT",

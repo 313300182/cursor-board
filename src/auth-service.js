@@ -2,6 +2,8 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
+const PBKDF2_ITERATIONS = 100_000;
+
 function writePrivateFile(filePath, content) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   const tempPath = `${filePath}.tmp`;
@@ -11,13 +13,27 @@ function writePrivateFile(filePath, content) {
 
 function createPasswordRecord(password) {
   const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.scryptSync(password, salt, 32).toString('hex');
-  return { salt, hash };
+  const hash = crypto.pbkdf2Sync(
+    String(password),
+    Buffer.from(salt, 'hex'),
+    PBKDF2_ITERATIONS,
+    32,
+    'sha256',
+  ).toString('hex');
+  return { salt, hash, algo: 'pbkdf2' };
 }
 
 function verifyPassword(password, record) {
-  const actual = crypto.scryptSync(String(password || ''), record.salt, 32);
   const expected = Buffer.from(record.hash, 'hex');
+  const actual = record.algo === 'pbkdf2'
+    ? crypto.pbkdf2Sync(
+      String(password || ''),
+      Buffer.from(record.salt, 'hex'),
+      PBKDF2_ITERATIONS,
+      32,
+      'sha256',
+    )
+    : crypto.scryptSync(String(password || ''), record.salt, 32);
   return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
 }
 

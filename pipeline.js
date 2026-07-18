@@ -241,6 +241,43 @@ function buildDeployRepairPrompt(deployCommand, errorOutput) {
   ].join('\n');
 }
 
+function buildRetryRepairPrompt(error, { taskTitle, taskPrompt, workdirs } = {}) {
+  const lines = [
+    '【任务异常 · 修复阶段】',
+    '任务上次执行失败。请先修复导致失败的问题，系统随后会自动进入测试阶段继续流水线。',
+  ];
+  if (taskTitle) {
+    lines.push(`任务：${taskTitle}`);
+  }
+  const dirs = Array.isArray(workdirs) ? workdirs.filter((entry) => entry?.path) : [];
+  if (dirs.length > 1) {
+    lines.push('涉及工作目录：');
+    dirs.forEach((entry) => {
+      const label = String(entry.label || '').trim() || entry.path;
+      lines.push(`- ${label}：${entry.path}`);
+    });
+  }
+  lines.push(
+    '失败原因：',
+    '---',
+    truncateMiddle(error || '未提供错误信息'),
+    '---',
+  );
+  const promptText = String(taskPrompt || '').trim();
+  if (promptText) {
+    lines.push('原任务需求（供修复参考）：', '---', promptText, '---');
+  }
+  lines.push(
+    '请分析并修复导致上述失败的问题。',
+    '要求：',
+    '- 优先解决与失败原因直接相关的代码/配置/环境问题',
+    '- 修复后不要运行部署',
+    '- 不要输出 [TEST:PASS] / [TEST:FAIL]（测试阶段会再次执行）',
+    '- 简要说明修复内容',
+  );
+  return lines.join('\n');
+}
+
 const TASK_TITLE_MAX_LEN = 48;
 
 function parseTaskTitleMarker(text) {
@@ -331,6 +368,7 @@ module.exports = {
   parseGitMessage,
   buildDeployPrompt,
   buildDeployRepairPrompt,
+  buildRetryRepairPrompt,
   buildTitlePromptSuffix,
   appendDevSuffix,
   appendTitleSuffix,

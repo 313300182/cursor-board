@@ -11,6 +11,7 @@ const {
   appendTitleSuffix,
   statusForPhase,
   buildDeployRepairPrompt,
+  buildRetryRepairPrompt,
   buildGitMessagePrompt,
   parseGitMessage,
   truncateMiddle,
@@ -151,6 +152,19 @@ test('buildDeployRepairPrompt 要求修复但不直接部署', () => {
   assert.match(prompt, /npm run deploy/);
   assert.match(prompt, /exit 1/);
   assert.match(prompt, /不要执行部署命令/);
+});
+
+test('buildRetryRepairPrompt 包含失败原因与原任务上下文', () => {
+  const prompt = buildRetryRepairPrompt('测试失败: assert 1 === 2', {
+    taskTitle: '修复登录',
+    taskPrompt: '实现登录功能',
+    workdirs: [{ label: '后端', path: 'D:\\backend' }],
+  });
+  assert.match(prompt, /任务异常 · 修复阶段/);
+  assert.match(prompt, /测试失败/);
+  assert.match(prompt, /修复登录/);
+  assert.match(prompt, /实现登录功能/);
+  assert.match(prompt, /不要输出 \[TEST:PASS\]/);
 });
 
 test('buildGitMessagePrompt 列出已确定的提交文件并只索取提交信息', () => {

@@ -22,3 +22,9 @@ test('对话弹窗支持新会话与多轮消息区', () => {
   assert.match(html, /id="chatMessages"/);
   assert.match(html, /chat-display\.js/);
 });
+
+test('新对话创建使用 upsert 避免 SSE 与 API 重复插入', () => {
+  assert.match(html, /function upsertChatSession/);
+  assert.match(html, /async function createChatSession\(\)[\s\S]*?upsertChatSession\(session,\{toFront:true\}\)/);
+  assert.match(html, /if\(eventName==='chat:created'\)[\s\S]*?upsertChatSession\(payload,\{toFront:true\}\)/);
+});

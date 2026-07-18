@@ -2194,6 +2194,18 @@
       return state.chat.sessionsById[state.chat.activeSessionId]||null;
     }
 
+    function upsertChatSession(session,{toFront=false}={}){
+      if(!session?.id)return;
+      if(state.chat.sessionsById[session.id]){
+        state.chat.sessionsById[session.id]={...state.chat.sessionsById[session.id],...session};
+        state.chat.sessions=state.chat.sessions.map(item=>item.id===session.id?{...item,...session}:item);
+        return;
+      }
+      if(toFront)state.chat.sessions.unshift(session);
+      else state.chat.sessions.push(session);
+      state.chat.sessionsById[session.id]=session;
+    }
+
     function chatStatusText(session){
       if(!session)return '';
       if(session.status==='running')return 'Agent 正在回复…';
@@ -2310,8 +2322,7 @@
       $('chatError')&&($('chatError').textContent='');
       const payload=state.chat.scope==='global'?{projectId:null}:{projectId:state.chat.projectId};
       const session=await api('/api/chats',{method:'POST',body:JSON.stringify(payload)});
-      state.chat.sessions.unshift(session);
-      state.chat.sessionsById[session.id]=session;
+      upsertChatSession(session,{toFront:true});
       state.chat.activeSessionId=session.id;
       state.chat.messages[session.id]=[];
       state.chat.streamChunks[session.id]=[];
@@ -2395,15 +2406,9 @@
       }
       if(eventName==='chat:created'){
         if(state.chat.scope==='global'&&!payload.project_id){
-          if(!state.chat.sessionsById[payload.id]){
-            state.chat.sessions.unshift(payload);
-            state.chat.sessionsById[payload.id]=payload;
-          }
+          upsertChatSession(payload,{toFront:true});
         }else if(state.chat.scope==='project'&&payload.project_id===state.chat.projectId){
-          if(!state.chat.sessionsById[payload.id]){
-            state.chat.sessions.unshift(payload);
-            state.chat.sessionsById[payload.id]=payload;
-          }
+          upsertChatSession(payload,{toFront:true});
         }
         if(state.chat.scope&&$('chatModal')&&!$('chatModal').classList.contains('hidden'))renderChatModal();
         return;

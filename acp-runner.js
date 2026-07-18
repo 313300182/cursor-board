@@ -159,6 +159,9 @@ class AcpRunner {
       resumeSessionId,
       onEvent,
       run: async (session) => {
+        const emit = (type, payload) => {
+          this.activeRuns.get(taskId)?.emit(type, payload);
+        };
         const emitPhase = (phase, extra = {}) => {
           if (onEvent) onEvent('phase', { phase, ...extra });
         };

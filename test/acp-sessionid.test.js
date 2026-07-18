@@ -35,6 +35,19 @@ test('runSingleTask 返回结果时不引用未定义的 sessionId', async () =>
   assert.ok(!Object.prototype.hasOwnProperty.call(result, 'undefined'));
 });
 
+test('runChatTurn 返回结果时使用 chatSessionId 校验 Agent 结果', async () => {
+  const runner = new AcpRunner({ cursor: {}, security: {} });
+  runner.withSession = async ({ run }) => run(stubSession('聊天已完成'));
+
+  const result = await runner.runChatTurn({
+    chatSessionId: 'chat-1',
+    workdir: process.cwd(),
+    prompt: 'hello',
+  });
+
+  assert.equal(result.resultSummary, '聊天已完成');
+});
+
 test('runPipelineTask 测试通过后返回 awaitingDeploy，且不引用未定义的 sessionId', async () => {
   const runner = new AcpRunner({ cursor: {}, security: {} });
   runner.withSession = async ({ run }) => {

@@ -49,7 +49,16 @@ test('statusGroup 映射流水线阶段到看板列', () => {
   assert.equal(statusGroup('failed'), 'problem');
 });
 
-test('待执行列按创建时间倒序展示（栈顶为最新）', () => {
+test('待执行列按 queue_position 倒序展示（栈底为队首）', () => {
+  const sorted = sortTasksForGroup([
+    task('old', { created_at: '2026-01-01T00:00:00.000Z', queue_position: 1 }),
+    task('new', { created_at: '2026-01-03T00:00:00.000Z', queue_position: 3 }),
+    task('mid', { created_at: '2026-01-02T00:00:00.000Z', queue_position: 2 }),
+  ], 'pending');
+  assert.deepEqual(sorted.map((item) => item.id), ['new', 'mid', 'old']);
+});
+
+test('待执行列无 queue_position 时回退到创建时间倒序', () => {
   const sorted = sortTasksForGroup([
     task('old', { created_at: '2026-01-01T00:00:00.000Z' }),
     task('new', { created_at: '2026-01-03T00:00:00.000Z' }),

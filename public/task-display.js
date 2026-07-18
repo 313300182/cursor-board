@@ -1,5 +1,5 @@
 /**
- * Kanban column display ordering (does not affect scheduler FIFO).
+ * Kanban column display ordering; pending queue_position also drives scheduler FIFO.
  * @author Amadeus
  */
 (function (root, factory) {
@@ -29,10 +29,21 @@
     return a > b ? -1 : 1;
   }
 
+  function compareQueuePosition(left, right) {
+    const leftPos = left?.queue_position;
+    const rightPos = right?.queue_position;
+    if (leftPos != null && rightPos != null && leftPos !== rightPos) {
+      return leftPos > rightPos ? -1 : 1;
+    }
+    if (leftPos != null && rightPos == null) return -1;
+    if (leftPos == null && rightPos != null) return 1;
+    return compareTimeDesc(left?.created_at, right?.created_at);
+  }
+
   function sortTasksForGroup(tasks, group) {
     const sorted = [...tasks];
     if (group === 'pending') {
-      return sorted.sort((left, right) => compareTimeDesc(left.created_at, right.created_at));
+      return sorted.sort(compareQueuePosition);
     }
     if (group === 'done') {
       return sorted.sort((left, right) => compareTimeDesc(

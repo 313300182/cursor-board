@@ -34,6 +34,14 @@ function createTasksRouter(deps) {
     res.json({ archived, count: archived.length });
   }));
 
+  router.post('/reorder', asyncHandler(async (req, res) => {
+    const projectId = String(req.body.projectId || '').trim();
+    const ids = Array.isArray(req.body.ids) ? req.body.ids.map(String) : [];
+    if (!projectId) throw new HttpError(400, '缺少 projectId');
+    const tasks = queue.reorderPendingTasks(projectId, ids);
+    res.json({ tasks });
+  }));
+
   router.get('/:id', asyncHandler(async (req, res) => {
     const task = repo.getTask(req.params.id);
     if (!task) throw new HttpError(404, '任务不存在');

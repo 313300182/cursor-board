@@ -60,6 +60,13 @@ function createRetryQueue() {
     addEvent(taskId, type, payload) {
       events.push({ taskId, type, payload });
     },
+    appendPendingQueuePosition(id) {
+      const current = tasks.get(id);
+      if (!current) throw new Error('任务不存在');
+      const next = { ...current, queue_position: 1 };
+      tasks.set(id, next);
+      return next;
+    },
   };
   const queue = new TaskQueue({
     repo,

@@ -4,6 +4,8 @@ const express = require('express');
 const { normalizeWorkdirs } = require('../../db');
 const { scanProjectRulesForWorkdirs } = require('../../project-rules');
 const { scanProjectSkillsForWorkdirs } = require('../../project-skills');
+const { getModelSettings } = require('../../model-config');
+const { getTemplate } = require('../../templates');
 const { asyncHandler, HttpError } = require('../middleware/error');
 
 function validateProjectWorkdirs(workdirs, queue) {
@@ -29,8 +31,26 @@ function parseCreateProjectWorkdirs(body) {
   return [];
 }
 
+function validateProjectDefaults(body, config) {
+  const models = getModelSettings(config);
+  const modelIds = new Set(models.options.map((option) => option.id));
+  const simpleModel = String(body.simpleModel || '').trim();
+  const complexModel = String(body.complexModel || '').trim();
+  const defaultTemplate = String(body.defaultTemplate || '').trim();
+  if (simpleModel && !modelIds.has(simpleModel)) {
+    throw new HttpError(400, `简单模式模型不可用: ${simpleModel}`);
+  }
+  if (complexModel && !modelIds.has(complexModel)) {
+    throw new HttpError(400, `复杂模式模型不可用: ${complexModel}`);
+  }
+  if (defaultTemplate && !getTemplate(defaultTemplate)) {
+    throw new HttpError(400, `默认任务类型不存在: ${defaultTemplate}`);
+  }
+  return { simpleModel: simpleModel || null, complexModel: complexModel || null, defaultTemplate: defaultTemplate || null };
+}
+
 function createProjectsRouter(deps) {
-  const { repo, projects, queue, projectDeployer, broadcaster } = deps;
+  const { repo, projects, queue, projectDeployer, broadcaster, config } = deps;
   const router = express.Router();
 
   router.get('/', asyncHandler(async (_req, res) => {
@@ -46,6 +66,7 @@ function createProjectsRouter(deps) {
     const deployCommand = String(req.body.deployCommand || '').trim();
     const gitEnabled = Boolean(req.body.gitEnabled);
     const gitPush = Boolean(req.body.gitPush);
+    const defaults = validateProjectDefaults(req.body, config);
     const workdirs = validateProjectWorkdirs(parseCreateProjectWorkdirs(req.body), queue);
     if (!name) throw new HttpError(400, '项目名称不能为空');
     const project = projects.createProject({
@@ -56,6 +77,7 @@ function createProjectsRouter(deps) {
       deploy_command: deployCommand || null,
       git_enabled: gitEnabled,
       git_push: gitEnabled && gitPush,
+      ...defaults,
       created_at: new Date().toISOString(),
     });
     broadcaster.send('project:created', project);
@@ -93,6 +115,13 @@ function createProjectsRouter(deps) {
       gitEnabled: req.body.gitEnabled,
       gitPush: req.body.gitPush,
     });
+    broadcaster.send('project:updated', project);
+    res.json({ ...project, counts: repo.countByProject(project.id) });
+  }));
+
+  router.patch('/:id/defaults', asyncHandler(async (req, res) => {
+    const defaults = validateProjectDefaults(req.body, config);
+    const project = projects.updateProjectDefaults(req.params.id, defaults);
     broadcaster.send('project:updated', project);
     res.json({ ...project, counts: repo.countByProject(project.id) });
   }));
@@ -142,4 +171,5 @@ module.exports = {
   createProjectsRouter,
   validateProjectWorkdirs,
   parseCreateProjectWorkdirs,
+  validateProjectDefaults,
 };

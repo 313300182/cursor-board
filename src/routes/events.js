@@ -20,7 +20,17 @@ function createEventsRouter(deps) {
     broadcaster.add(res);
 
     const heartbeat = setInterval(() => {
-      broadcaster.send('heartbeat', { ts: Date.now() });
+      try {
+        if (!res.write(`event: heartbeat\ndata: ${JSON.stringify({ ts: Date.now() })}\n\n`)) {
+          clearInterval(heartbeat);
+          broadcaster.remove(res);
+          res.destroy();
+        }
+      } catch (_) {
+        clearInterval(heartbeat);
+        broadcaster.remove(res);
+        res.destroy();
+      }
     }, 15000);
 
     req.on('close', () => {

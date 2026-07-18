@@ -4,15 +4,25 @@ const AcpRunner = require('./acp-runner');
 const { resolveTaskModel } = require('./model-config');
 const { ROOT } = require('./src/config');
 
+const MAX_ATTACHMENT_DATA_LENGTH = 3 * 1024 * 1024;
+const MAX_TOTAL_ATTACHMENT_DATA_LENGTH = 8 * 1024 * 1024;
+
 function normalizeAttachments(items) {
   if (!Array.isArray(items)) return [];
-  return items
-    .filter((item) => item?.mimeType?.startsWith('image/') && item?.data)
-    .slice(0, 5)
-    .map((item) => ({
-      mimeType: item.mimeType,
-      data: item.data,
-    }));
+  const result = [];
+  let totalLength = 0;
+  for (const item of items) {
+    if (!item?.mimeType?.startsWith('image/') || !item?.data) continue;
+    const data = String(item.data);
+    if (data.length > MAX_ATTACHMENT_DATA_LENGTH) throw new Error('单个图片附件过大');
+    if (totalLength + data.length > MAX_TOTAL_ATTACHMENT_DATA_LENGTH) {
+      throw new Error('图片附件总大小过大');
+    }
+    totalLength += data.length;
+    result.push({ mimeType: String(item.mimeType), data });
+    if (result.length >= 5) break;
+  }
+  return result;
 }
 
 function deriveSessionTitle(message) {

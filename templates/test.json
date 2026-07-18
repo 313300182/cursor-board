@@ -1,0 +1,25 @@
+{
+  "id": "test",
+  "name": "编写测试",
+  "category": "质量",
+  "order": 3,
+  "description": "为指定模块补充单元测试或集成测试，提高覆盖率",
+  "variables": [
+    {
+      "name": "target",
+      "required": true,
+      "label": "测试目标",
+      "input": "textarea",
+      "images": true,
+      "placeholder": "例如：为 OrderService.createOrder 补充边界条件测试（支持粘贴截图）"
+    },
+    {
+      "name": "framework",
+      "required": false,
+      "label": "测试框架",
+      "input": "input",
+      "placeholder": "可选，例如：JUnit 5 + Mockito"
+    }
+  ],
+  "prompt": "工作目录：{{workdir}}\n\n测试目标：{{target}}\n测试框架：{{framework}}\n\n要求：\n- 覆盖正常路径与关键边界/异常场景\n- 测试应可独立运行，不依赖外部环境\n- 遵循项目现有测试目录与命名规范\n- 完成后说明新增了哪些测试文件，以及如何运行"
+}

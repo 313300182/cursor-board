@@ -1,0 +1,18 @@
+{
+  "id": "local-doc",
+  "name": "本地文档处理",
+  "category": "通用",
+  "order": 2,
+  "description": "处理本地文件、文档整理、批量改写或格式转换",
+  "variables": [
+    {
+      "name": "description",
+      "required": true,
+      "label": "处理说明",
+      "input": "textarea",
+      "images": true,
+      "placeholder": "说明要处理的文件、目标格式或整理规则（支持粘贴截图）"
+    }
+  ],
+  "prompt": "工作目录：{{workdir}}\n\n任务：{{description}}\n\n要求：\n- 使用文件操作完成任务\n- 完成后列出修改了哪些文件"
+}

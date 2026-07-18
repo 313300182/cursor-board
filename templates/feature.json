@@ -1,0 +1,20 @@
+{
+  "id": "feature",
+  "name": "新功能开发",
+  "category": "开发",
+  "order": 1,
+  "pipeline": true,
+  "description": "开发 → 测试 → 自动部署，全程同一对话，测试失败自动打回开发",
+  "variables": [
+    {
+      "name": "requirement",
+      "required": true,
+      "label": "功能需求",
+      "input": "textarea",
+      "rows": 10,
+      "images": true,
+      "placeholder": "描述要实现的功能、用户场景、验收标准及补充说明（支持粘贴截图）"
+    }
+  ],
+  "prompt": "工作目录：{{workdir}}\n\n功能需求：{{requirement}}\n\n要求：\n- 遵循项目现有代码风格与目录结构\n- 优先复用已有组件与工具\n- 完成后给出简洁的结果摘要，说明新增/修改了哪些文件\n- 此任务为流水线模式：先完成开发，系统会自动进入测试与部署；测试/部署命令由 AI 根据项目配置自动识别"
+}

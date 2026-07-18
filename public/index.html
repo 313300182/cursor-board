@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cursor Board</title>
+  <style>
+    :root {
+      --bg:#0d1117;--panel:#161b22;--panel2:#0f141c;--border:#30363d;
+      --text:#e6edf3;--muted:#8b949e;--accent:#5794f2;--green:#3fb950;
+      --red:#f85149;--orange:#d29922;--purple:#a371f7;
+    }
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:"Segoe UI",sans-serif}
+    header{height:64px;padding:0 22px;border-bottom:1px solid var(--border);background:var(--panel);display:flex;align-items:center;justify-content:space-between}
+    header .brand{display:flex;align-items:center;gap:12px}.muted{color:var(--muted)} .hidden{display:none!important}
+    button,.button,input,select,textarea{border:1px solid var(--border);border-radius:8px;background:var(--panel2);color:var(--text);padding:9px 11px;font:inherit}
+    button,.button{cursor:pointer;background:#253249;font-weight:600;text-decoration:none}button.primary{background:var(--accent);border-color:var(--accent);color:white}
+    button.danger{background:#3d2023;color:#ffb3ad}input,select,textarea{width:100%}textarea{min-height:95px;resize:vertical}
+    textarea.textarea-large{min-height:220px;line-height:1.5}
+    label{display:block;color:var(--muted);font-size:13px;margin:11px 0 6px}
+    .container{padding:20px;max-width:1800px;margin:auto}.panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+    h1,h2,h3{margin:0 0 12px}.toolbar{display:flex;gap:10px;align-items:center}.toolbar>*{width:auto}
+    .projects-layout{display:grid;grid-template-columns:1fr 330px;gap:18px}.project-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+    .project-card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;display:block;color:inherit;text-decoration:none}
+    .project-card:hover{border-color:var(--accent)}.project-card .path{font-size:12px;color:var(--muted);word-break:break-all;min-height:34px}
+    .stats{display:flex;gap:12px;margin-top:14px;font-size:12px}.stats b{font-size:17px;display:block}
+    .project-layout{display:grid;grid-template-columns:360px minmax(0,1fr);gap:14px;align-items:start}
+    .board{display:grid;grid-template-columns:repeat(8,minmax(120px,1fr));gap:9px;overflow-x:auto}
+    .column{background:var(--panel2);border:1px solid var(--border);border-radius:10px;min-height:480px;padding:9px}
+    .column h3{font-size:12px;color:var(--muted);display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap}
+    .column-actions{display:flex;gap:4px;flex-wrap:wrap}
+    .column-actions button{padding:2px 7px;font-size:10px;font-weight:500}
+    .column-footer{margin-top:6px}
+    .column-footer button{width:100%;padding:5px 8px;font-size:11px;font-weight:500}
+    .archived-section{margin-top:8px;border-top:1px dashed var(--border);padding-top:8px}
+    .archived-section summary{cursor:pointer;font-size:11px;color:var(--muted);list-style:none}
+    .archived-section summary::-webkit-details-marker{display:none}
+    .archived-section .card{opacity:.82}
+    .card{background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:10px;margin-bottom:8px;cursor:pointer}
+    .card:hover,.card.active{border-color:var(--accent)}.card-title{font-weight:600;font-size:13px}.meta{font-size:11px;color:var(--muted);margin-top:6px}
+    .column.stack-column .cards{display:flex;flex-direction:column}
+    .column.stack-column .card{margin-bottom:0;box-shadow:0 1px 0 rgba(255,255,255,.04)}
+    .column.stack-column .card+.card{margin-top:-3px;border-top-color:#252c36}
+    .column.stack-column .card:last-child{border-color:var(--green);box-shadow:0 0 0 1px rgba(63,185,80,.35)}
+    .badge{display:inline-block;font-size:10px;padding:2px 7px;border-radius:99px;margin-top:7px;background:#2b3442}
+    .queue-next{background:#1f3a2d;color:#7ee787}
+    .complex{background:#352656;color:#d8b9ff}.pipeline{background:#1f3a2d;color:#7ee787}.status-running,.status-planning{color:#79b8ff}.status-done{color:#7ee787}.status-failed{color:#ff7b72}.status-wait{color:#e3b341}
+    pre,.markdown{background:#0b0f14;border:1px solid var(--border);padding:10px;border-radius:8px;white-space:pre-wrap;overflow-wrap:break-word;font-size:12px;max-height:310px;overflow:auto}
+    .markdown h1,.markdown h2,.markdown h3{margin:12px 0 6px}.markdown p{margin:5px 0}.markdown ul{margin:5px 0 5px 18px;padding:0}.markdown li{margin:3px 0}.markdown code{background:#222a35;padding:1px 4px;border-radius:4px}.markdown strong{font-weight:600;color:#fff}
+    .rule{border-top:1px solid var(--border);padding-top:10px;margin-top:10px}.rule summary{cursor:pointer;font-weight:600}
+    .switch-row{display:flex;align-items:center;justify-content:space-between;margin-top:14px}.switch{position:relative;width:44px;height:24px}
+    .switch input{opacity:0;width:0;height:0}.slider{position:absolute;inset:0;background:#39414d;border-radius:20px;cursor:pointer}.slider:before{content:"";position:absolute;width:18px;height:18px;left:3px;top:3px;background:white;border-radius:50%;transition:.2s}.switch input:checked+.slider{background:var(--purple)}.switch input:checked+.slider:before{transform:translateX(20px)}
+    .template-section{border:1px solid var(--border);border-radius:8px;margin:11px 0 6px;background:var(--panel2);overflow:hidden}
+    .template-section summary{cursor:pointer;font-weight:600;padding:9px 11px;font-size:13px;color:var(--text);list-style:none;display:flex;align-items:center;justify-content:space-between;gap:8px}
+    .template-section summary::-webkit-details-marker{display:none}
+    .template-section summary::after{content:"▸";color:var(--muted);font-size:11px;flex-shrink:0}
+    .template-section[open] summary{border-bottom:1px solid var(--border)}
+    .template-section[open] summary::after{content:"▾"}
+    .template-section summary .muted{font-weight:400}
+    .template-picker-body{padding:8px 10px 10px}
+    .template-category{font-size:10px;color:var(--muted);margin:8px 0 4px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+    .template-category:first-child{margin-top:0}
+    .template-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:2px}
+    .template-card{padding:6px 9px;border:1px solid var(--border);border-radius:7px;cursor:pointer;font-size:12px;background:var(--panel);text-align:left;width:100%}
+    .template-card:hover,.template-card.active{border-color:var(--accent);background:#1a2433}
+    .template-card .name{font-weight:600;font-size:12px;line-height:1.3}
+    .rule-section summary{cursor:pointer;font-weight:600;margin-bottom:8px}
+    .rule-section summary::-webkit-details-marker{display:none}
+    .rule-section summary::before{content:"▸ ";color:var(--muted);font-size:11px}
+    .rule-section[open] summary::before{content:"▾ "}
+    .variable-fields{margin-top:4px}
+    .field-block{margin-bottom:4px}
+    .field-toolbar{display:flex;align-items:center;justify-content:space-between;margin:11px 0 6px}
+    .field-toolbar label{margin:0}
+    .field-toolbar .toolbar{margin:0;gap:6px}
+    .field-toolbar button{padding:4px 8px;font-size:11px;font-weight:500}
+    .image-previews{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+    .image-preview{position:relative;width:72px;height:72px;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#0b0f14}
+    .image-preview img{width:100%;height:100%;object-fit:cover;display:block}
+    .image-preview button{position:absolute;top:2px;right:2px;width:20px;height:20px;padding:0;border-radius:50%;font-size:12px;line-height:1;background:rgba(0,0,0,.75);color:#fff;border:none}
+    .drawer-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:90}
+    .task-drawer{position:fixed;top:0;right:0;width:min(420px,92vw);height:100vh;background:var(--panel);border-left:1px solid var(--border);z-index:100;display:flex;flex-direction:column;box-shadow:-8px 0 24px rgba(0,0,0,.35)}
+    .task-drawer-header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:16px;border-bottom:1px solid var(--border)}
+    .task-drawer-header h3{margin:0;font-size:15px;line-height:1.4}
+    .task-drawer-body{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+    .output-section{display:flex;flex-direction:column;gap:6px;min-height:0}
+    .output-section h3{margin:0;font-size:13px;color:var(--muted);font-weight:600}
+    .log-stream,.summary-box{background:#0b0f14;border:1px solid var(--border);padding:10px;border-radius:8px;font-size:12px;overflow:auto}
+    .log-stream{flex:1;min-height:180px;max-height:340px}
+    .summary-box{min-height:96px;max-height:220px;color:var(--text)}
+    .summary-box.placeholder{color:var(--muted);font-style:italic}
+    .log-chunk{white-space:pre-wrap;overflow-wrap:break-word;margin:0}
+    .log-chunk+.log-chunk{margin-top:8px;padding-top:8px;border-top:1px dashed rgba(48,54,61,.7)}
+    .log-chunk-thinking{color:#b197fc;border-left:2px solid var(--purple);padding-left:8px}
+    .log-chunk-message{color:var(--text);line-height:1.55}
+    .log-chunk-message h1,.log-chunk-message h2,.log-chunk-message h3{margin:10px 0 4px;font-size:13px}
+    .log-chunk-message p{margin:4px 0}
+    .log-chunk-message ul{margin:4px 0 4px 18px;padding:0}
+    .log-chunk-message li{margin:2px 0}
+    .log-chunk-message code{background:#222a35;padding:1px 4px;border-radius:4px}
+    .log-chunk-message strong{font-weight:600;color:#fff}
+    .log-chunk-system{color:var(--orange);font-size:11px;white-space:pre-wrap}
+    .drawer-close{padding:4px 10px;font-size:12px}
+    .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:110;display:flex;align-items:center;justify-content:center;padding:16px}
+    .modal-panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:18px;width:min(520px,96vw);box-shadow:0 12px 40px rgba(0,0,0,.45)}
+    .modal-panel h3{margin:0 0 6px;font-size:16px}
+    .modal-panel .muted{margin-bottom:12px;font-size:12px}
+    .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+    .interaction{border:1px solid var(--orange);background:#231d10;border-radius:9px;padding:12px;margin-top:12px}.option{display:flex;gap:8px;align-items:center;margin:7px 0}.option input{width:auto}
+    .project-deploy{display:flex;align-items:flex-end;gap:8px;padding:10px;margin-bottom:12px;border:1px solid var(--border);border-radius:9px;background:var(--panel2)}
+    .project-deploy .command{flex:1}.project-deploy label{margin:0 0 5px}.project-deploy .status{min-width:120px;font-size:12px;color:var(--muted)}
+    .project-deploy button{white-space:nowrap}
+    #logBox{min-height:120px}.error{color:#ff938a;font-size:13px;margin-top:8px}
+    @media(max-width:1250px){.project-layout{grid-template-columns:1fr}.projects-layout{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <a id="homeBtn" class="button hidden" href="/">← 项目</a>
+      <strong>Cursor Board</strong>
+      <span id="pageTitle" class="muted">项目中心</span>
+    </div>
+    <div class="toolbar"><span id="queueState" class="muted"></span><span id="connState" class="muted">未连接</span></div>
+  </header>
+
+  <div class="container">
+    <section id="homeView" class="projects-layout">
+      <div>
+        <h1>项目</h1>
+        <p class="muted">每个项目拥有独立串行队列，不同项目可并行执行。</p>
+        <div id="projectGrid" class="project-grid"></div>
+      </div>
+      <aside class="panel">
+        <h2>添加项目</h2>
+        <label>项目名称</label><input id="projectName" placeholder="例如：订单服务" />
+        <label>固定工作目录</label><input id="projectWorkdir" placeholder="D:\code\order-service" />
+        <label>部署命令 <span class="muted">(可选)</span></label><input id="projectDeployCommand" placeholder="例如：npm run deploy" />
+        <button id="createProjectBtn" class="primary" style="width:100%;margin-top:14px">创建项目</button>
+        <div id="projectError" class="error"></div>
+      </aside>
+    </section>
+
+    <section id="projectView" class="project-layout hidden">
+      <aside class="panel">
+        <h2>新建任务</h2>
+        <div id="titlePreviewGroup">
+          <label>任务标题</label>
+          <div id="titlePreview" class="muted" style="font-size:13px;line-height:1.5;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--panel2)">填写任务描述后自动生成</div>
+        </div>
+        <div id="titleInputGroup" class="hidden">
+          <label>标题 <span class="muted">(可选，留空则自动总结)</span></label>
+          <input id="titleInput" placeholder="复杂任务建议填写标题" />
+        </div>
+        <div id="workdirGroup"><label>工作目录</label><input id="workdirInput" placeholder="本机任务必须指定目录" /></div>
+        <div id="variableFields" class="variable-fields"></div>
+        <details id="templateSection" class="template-section">
+          <summary>任务类型 · <span id="templateSummary" class="muted">通用</span></summary>
+          <select id="templateSelect" class="hidden"></select>
+          <div id="templatePicker" class="template-picker-body"></div>
+        </details>
+        <div class="switch-row">
+          <div><strong>流水线</strong><div class="muted" style="font-size:11px">开发 → 测试 → 等待项目部署</div></div>
+          <label class="switch"><input id="pipelineInput" type="checkbox"><span class="slider"></span></label>
+        </div>
+        <div class="switch-row">
+          <div><strong>复杂任务</strong><div class="muted" style="font-size:11px">开启后先 Plan，再确认执行</div></div>
+          <label class="switch"><input id="complexInput" type="checkbox"><span class="slider"></span></label>
+        </div>
+        <label>执行模型</label><select id="modelSelect"></select>
+        <button id="createTaskBtn" class="primary" style="width:100%;margin-top:14px">提交到项目队列</button>
+        <div id="taskError" class="error"></div>
+        <div id="rulesPanel" style="margin-top:20px"><h3>Cursor Rules</h3><div class="muted">加载中...</div></div>
+      </aside>
+
+      <main class="panel">
+        <div class="toolbar" style="justify-content:space-between;margin-bottom:12px">
+          <div><h2 id="projectHeading">任务看板</h2><div id="projectPath" class="muted"></div></div>
+          <button id="refreshBtn">刷新</button>
+        </div>
+        <div id="projectDeployBar" class="project-deploy hidden">
+          <div class="command">
+            <label>项目部署命令</label>
+            <input id="deployCommandInput" placeholder="例如：npm run deploy" />
+          </div>
+          <button id="saveDeployCommandBtn">保存命令</button>
+          <button id="deployProjectBtn" class="primary">部署（0）</button>
+          <div id="deployProjectStatus" class="status"></div>
+          <button id="approveDeployFixBtn" class="hidden">批准 Agent 修复</button>
+          <button id="rejectDeployFixBtn" class="hidden">暂不修复</button>
+        </div>
+        <div class="board">
+          <div class="column" data-group="pending"><h3>待执行 <span class="count"></span></h3><div class="cards"></div></div>
+          <div class="column" data-group="planning"><h3>规划中 <span class="count"></span></h3><div class="cards"></div></div>
+          <div class="column" data-group="waiting"><h3>待确认 <span class="count"></span></h3><div class="cards"></div></div>
+          <div class="column" data-group="developing"><h3>开发中 <span class="count"></span></h3><div class="cards"></div></div>
+          <div class="column" data-group="testing"><h3>测试中 <span class="count"></span></h3><div class="cards"></div></div>
+          <div class="column" data-group="running"><h3>执行中 <span class="count"></span></h3><div class="cards"></div></div>
+          <div class="column" data-group="done"><h3><span>已完成 <span class="count"></span></span><span class="column-actions"></span></h3><div class="cards"></div><div class="column-footer"></div></div>
+          <div class="column" data-group="problem"><h3>异常 <span class="count"></span></h3><div class="cards"></div></div>
+        </div>
+      </main>
+    </section>
+  </div>
+
+  <div id="drawerBackdrop" class="drawer-backdrop hidden"></div>
+  <div id="iterateModal" class="modal-backdrop hidden">
+    <div class="modal-panel" role="dialog" aria-labelledby="iterateModalTitle">
+      <h3 id="iterateModalTitle">迭代任务</h3>
+      <p class="muted">基于已完成任务的对话上下文继续优化，将自动继承原任务的模型与流水线设置。</p>
+      <label for="iterateRequirement">优化需求</label>
+      <textarea id="iterateRequirement" rows="8" placeholder="描述要优化或改进的内容、验收标准等"></textarea>
+      <div id="iterateError" class="error"></div>
+      <div class="modal-actions">
+        <button type="button" id="iterateCancelBtn">取消</button>
+        <button type="button" id="iterateSubmitBtn" class="primary">提交迭代</button>
+      </div>
+    </div>
+  </div>
+  <aside id="taskDrawer" class="task-drawer hidden">
+    <div class="task-drawer-header">
+      <div>
+        <h3 id="drawerTitle">任务</h3>
+        <div id="drawerMeta" class="meta"></div>
+      </div>
+      <button type="button" id="drawerCloseBtn" class="drawer-close">关闭</button>
+    </div>
+    <div class="task-drawer-body">
+      <div id="drawerDetail"></div>
+      <section class="output-section">
+        <h3>结果摘要</h3>
+        <div id="drawerSummaryBox" class="summary-box markdown placeholder"></div>
+      </section>
+      <section class="output-section">
+        <h3>实时输出</h3>
+        <div id="drawerLiveBox" class="log-stream"></div>
+      </section>
+    </div>
+  </aside>
+
+  <script src="/task-display.js"></script>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const state = {
+      token: localStorage.getItem('cursorBoardToken') || '',
+      projectId: params.get('project'),
+      project: null, projects: [], tasks: [], templates: [], rules: [],
+      selectedId: null, logChunks: {}, models: { options: [] }, fieldImages: {},
+      doneExpanded: false, archivedTasks: [], showArchived: false,
+      iterateSourceId: null,
+    };
+    const $ = (id) => document.getElementById(id);
+
+    function headers(){return {'Content-Type':'application/json',Authorization:`Bearer ${state.token}`}}
+    async function api(path,options={}){
+      const response=await fetch(path,{...options,headers:{...headers(),...(options.headers||{})}});
+      const data=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(data.error||`HTTP ${response.status}`);
+      return data;
+    }
+    function escapeHtml(value){return TaskDisplay.escapeHtml(value)}
+    function markdown(value){return TaskDisplay.formatMarkdown(value)}
+
+    async function bootstrap(){
+      const data=await fetch('/api/bootstrap').then(r=>r.json());
+      if(!state.token){state.token=data.token;localStorage.setItem('cursorBoardToken',state.token)}
+      state.models=data.models||{options:[]};
+      state.templates=await api('/api/templates');
+    }
+
+    function modelName(modelId){
+      return state.models.options.find(item=>item.id===modelId)?.name||modelId||'未指定';
+    }
+
+    function renderModelOptions(){
+      const defaultId=$('complexInput').checked?state.models.complexDefault:state.models.simpleDefault;
+      $('modelSelect').innerHTML=
+        `<option value="">默认：${escapeHtml(modelName(defaultId))}</option>`+
+        state.models.options.map(item=>`<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join('');
+    }
+
+    function templateName(templateId){
+      return state.templates.find(item=>item.id===templateId)?.name||templateId;
+    }
+
+    const CATEGORY_ORDER = ['开发', '质量', '通用'];
+
+    function templateCategories(){
+      const categories=[];
+      CATEGORY_ORDER.forEach(category=>{
+        if(state.templates.some(item=>(item.category||'其他')===category))categories.push(category);
+      });
+      state.templates.forEach(item=>{
+        const category=item.category||'其他';
+        if(!categories.includes(category))categories.push(category);
+      });
+      return categories;
+    }
+
+    function defaultTemplateId(){
+      return state.templates.find(item=>item.id==='general')?.id||state.templates[0]?.id||'';
+    }
+
+    function renderTemplateOptions(){
+      const categories=templateCategories();
+      const current=$('templateSelect').value||defaultTemplateId();
+      $('templateSelect').innerHTML=state.templates.map(item=>`
+        <option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join('');
+      $('templateSelect').value=current||defaultTemplateId();
+      $('templatePicker').innerHTML=categories.map(category=>`
+        <div class="template-category">${escapeHtml(category)}</div>
+        <div class="template-grid">
+          ${state.templates.filter(item=>(item.category||'其他')===category).map(item=>`
+            <button type="button" class="template-card" data-template="${escapeHtml(item.id)}">
+              <div class="name">${escapeHtml(item.name)}</div>
+            </button>`).join('')}
+        </div>`).join('');
+      syncTemplateSelection();
+      document.querySelectorAll('[data-template]').forEach(card=>{
+        card.onclick=()=>{
+          $('templateSelect').value=card.dataset.template;
+          syncTemplateSelection();
+          renderTemplateFields();
+          $('templateSection').open=false;
+        };
+      });
+    }
+
+    function syncTemplateSelection(){
+      const current=$('templateSelect').value;
+      document.querySelectorAll('[data-template]').forEach(card=>{
+        card.classList.toggle('active',card.dataset.template===current);
+      });
+      const template=selectedTemplate();
+      const summary=$('templateSummary');
+      if(summary)summary.textContent=template?.name||'未选择';
+      if(template?.pipeline||template?.category==='开发'){
+        $('pipelineInput').checked=true;
+        $('complexInput').checked=false;
+        $('complexInput').disabled=true;
+      }else{
+        $('complexInput').disabled=false;
+      }
+      updateTitlePreview();
+    }
+
+    function selectedTemplate(){
+      return state.templates.find(item=>item.id===$('templateSelect').value)||null;
+    }
+
+    function renderTemplateFields(){
+      const template=selectedTemplate();
+      const keepImages={};
+      (template?.variables||[]).forEach(item=>{
+        if(state.fieldImages[item.name]?.length)keepImages[item.name]=state.fieldImages[item.name];
+      });
+      state.fieldImages=keepImages;
+      $('variableFields').innerHTML=(template?.variables||[]).map(item=>{
+        const rows=Number(item.rows)||4;
+        const largeClass=item.rows&&item.rows>=8?' textarea-large':'';
+        const imagesEnabled=Boolean(item.images);
+        const inputHtml=item.input==='input'
+          ? `<input id="var_${escapeHtml(item.name)}" placeholder="${escapeHtml(item.placeholder||'')}" />`
+          : `<textarea id="var_${escapeHtml(item.name)}" rows="${rows}" class="${largeClass.trim()}" placeholder="${escapeHtml(item.placeholder||'')}"></textarea>`;
+        const toolbar=imagesEnabled?`
+          <div class="field-toolbar">
+            <label>${escapeHtml(item.label||item.name)}${item.required?'':' <span class="muted">(可选)</span>'}</label>
+            <div class="toolbar">
+              <button type="button" data-paste-image="${escapeHtml(item.name)}">粘贴图片</button>
+              <input type="file" accept="image/*" class="hidden" data-image-input="${escapeHtml(item.name)}" />
+            </div>
+          </div>
+          ${inputHtml}
+          <div class="image-previews" data-image-list="${escapeHtml(item.name)}"></div>`:
+          `<label>${escapeHtml(item.label||item.name)}${item.required?'':' <span class="muted">(可选)</span>'}</label>${inputHtml}`;
+        return `<div class="field-block" data-field="${escapeHtml(item.name)}">${toolbar}</div>`;
+      }).join('');
+      bindFieldImageEvents();
+      Object.keys(state.fieldImages).forEach(renderImagePreviews);
+      document.querySelectorAll('[id^="var_"]').forEach(field=>{
+        field.addEventListener('input',updateTitlePreview);
+      });
+      updateTitlePreview();
+    }
+
+    function bindFieldImageEvents(){
+      document.querySelectorAll('[data-paste-image]').forEach(button=>{
+        button.onclick=()=>{
+          const field=button.dataset.pasteImage;
+          const input=document.querySelector(`[data-image-input="${field}"]`);
+          if(input)input.click();
+        };
+      });
+      document.querySelectorAll('[data-image-input]').forEach(input=>{
+        input.onchange=()=>{
+          const field=input.dataset.imageInput;
+          Array.from(input.files||[]).forEach(file=>addImageToField(field,file));
+          input.value='';
+        };
+      });
+      (selectedTemplate()?.variables||[]).filter(item=>item.images).forEach(item=>{
+        const textarea=$(`var_${item.name}`);
+        if(!textarea)return;
+        textarea.addEventListener('paste',event=>{
+          const files=Array.from(event.clipboardData?.items||[])
+            .filter(entry=>entry.type.startsWith('image/'))
+            .map(entry=>entry.getAsFile())
+            .filter(Boolean);
+          if(!files.length)return;
+          event.preventDefault();
+          files.forEach(file=>addImageToField(item.name,file));
+        });
+      });
+    }
+
+    function addImageToField(fieldName,file){
+      if(!file||!file.type.startsWith('image/'))return;
+      const reader=new FileReader();
+      reader.onload=()=>{
+        const match=String(reader.result||'').match(/^data:([^;]+);base64,(.+)$/);
+        if(!match)return;
+        if(!state.fieldImages[fieldName])state.fieldImages[fieldName]=[];
+        if(state.fieldImages[fieldName].length>=5)return;
+        state.fieldImages[fieldName].push({
+          id:crypto.randomUUID(),
+          mimeType:match[1],
+          data:match[2],
+          preview:`data:${match[1]};base64,${match[2]}`,
+        });
+        renderImagePreviews(fieldName);
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function renderImagePreviews(fieldName){
+      const container=document.querySelector(`[data-image-list="${fieldName}"]`);
+      if(!container)return;
+      const images=state.fieldImages[fieldName]||[];
+      container.innerHTML=images.map(item=>`
+        <div class="image-preview">
+          <img src="${item.preview}" alt="附件" />
+          <button type="button" data-remove-image="${escapeHtml(fieldName)}" data-image-id="${escapeHtml(item.id)}" title="移除">×</button>
+        </div>`).join('');
+      container.querySelectorAll('[data-remove-image]').forEach(button=>{
+        button.onclick=()=>{
+          const field=button.dataset.removeImage;
+          const imageId=button.dataset.imageId;
+          state.fieldImages[field]= (state.fieldImages[field]||[]).filter(item=>item.id!==imageId);
+          renderImagePreviews(field);
+        };
+      });
+    }
+
+    function collectAttachments(){
+      const attachments=[];
+      Object.entries(state.fieldImages).forEach(([field,images])=>{
+        (images||[]).forEach(item=>{
+          attachments.push({field,mimeType:item.mimeType,data:item.data});
+        });
+      });
+      return attachments;
+    }
+
+    function collectVariables(){
+      const variables={};
+      (selectedTemplate()?.variables||[]).forEach(item=>{
+        variables[item.name]=$(`var_${item.name}`)?.value?.trim()||'';
+      });
+      return variables;
+    }
+
+    const TITLE_MAX_LEN=48;
+    function normalizeTitleText(text){
+      return String(text||'').replace(/\r\n/g,'\n').split('\n').map(line=>line.trim()).filter(Boolean).join(' · ');
+    }
+    function pickPrimaryVariable(template,variables){
+      const fields=template?.variables||[];
+      const requiredText=fields.find(item=>item.required&&item.input!=='input');
+      if(requiredText){
+        const value=String(variables[requiredText.name]||'').trim();
+        if(value)return value;
+      }
+      for(const item of fields){
+        const value=String(variables[item.name]||'').trim();
+        if(value)return value;
+      }
+      return '';
+    }
+    function deriveTaskTitle(template,variables,explicitTitle){
+      const trimmed=String(explicitTitle||'').trim();
+      if(trimmed)return trimmed.slice(0,120);
+      const primary=normalizeTitleText(pickPrimaryVariable(template,variables));
+      if(primary){
+        const summary=primary.length>TITLE_MAX_LEN?`${primary.slice(0,TITLE_MAX_LEN)}…`:primary;
+        const prefix=template?.name?`${template.name} · `:'';
+        return `${prefix}${summary}`.slice(0,120);
+      }
+      return template?.name||'未命名任务';
+    }
+    function updateTitlePreview(){
+      const template=selectedTemplate();
+      const preview=$('titlePreview');
+      if(!preview)return;
+      const isComplex=$('complexInput').checked&&!$('pipelineInput').checked;
+      $('titlePreviewGroup').classList.toggle('hidden',isComplex);
+      $('titleInputGroup').classList.toggle('hidden',!isComplex);
+      if(isComplex)return;
+      const derived=deriveTaskTitle(template,collectVariables(),'');
+      preview.textContent=derived;
+    }
+
+    function resetTaskForm(){
+      $('titleInput').value='';
+      $('workdirInput').value='';
+      $('complexInput').checked=false;
+      $('complexInput').disabled=false;
+      $('pipelineInput').checked=false;
+      state.fieldImages={};
+      if(state.templates.length)$('templateSelect').value=defaultTemplateId();
+      renderModelOptions();
+      renderTemplateOptions();
+      renderTemplateFields();
+      updateTitlePreview();
+    }
+
+    function statusLabel(status){
+      const labels={
+        pending:'待执行',planning:'规划中',running:'执行中',developing:'开发中',testing:'测试中',
+        pending_deploy:'待部署',deploying:'部署中',awaiting_input:'待回答',pending_approval:'待批准',
+        done:'已完成',failed:'失败',needs_human:'需人工'
+      };
+      return labels[status]||status;
+    }
+
+    const {
+      statusGroup,
+      sortTasksForGroup,
+      parseTaskLogEvents,
+      appendLogChunk,
+      appendPermissionChunk,
+      resolveTaskSummary,
+      limitDoneTasksForDisplay,
+      renderLogChunksHtml,
+    } = window.TaskDisplay;
+
+    function renderTaskCard(task, options = {}) {
+      const { queueHead = false } = options;
+      const archivedBadge = task.archived ? '<span class="badge">已归档</span>' : '';
+      return `
+        <div class="card ${task.id === state.selectedId ? 'active' : ''}" data-task="${task.id}">
+          <div class="card-title">${escapeHtml(task.title)}</div>
+          <div class="meta">${escapeHtml(templateName(task.template))} · ${escapeHtml(statusLabel(task.status))} · ${escapeHtml(modelName(task.model_id))}</div>
+          ${queueHead ? '<span class="badge queue-next">队首</span>' : ''}
+          ${task.pipeline_mode ? '<span class="badge pipeline">流水线</span>' : ''}
+          ${task.is_complex ? '<span class="badge complex">复杂</span>' : ''}
+          ${archivedBadge}
+        </div>`;
+    }
+
+    function doneTasksSorted() {
+      return sortTasksForGroup(
+        state.tasks.filter((task) => statusGroup(task.status) === 'done'),
+        'done',
+      );
+    }
+
+    async function loadArchivedTasks() {
+      if (!state.projectId) return;
+      state.archivedTasks = await api(`/api/tasks?projectId=${encodeURIComponent(state.projectId)}&archived=1`);
+    }
+
+    async function archiveTasks(ids) {
+      if (!ids.length) return;
+      const result = await api('/api/tasks/archive', {
+        method: 'POST',
+        body: JSON.stringify({ projectId: state.projectId, ids }),
+      });
+      if (state.selectedId && ids.includes(state.selectedId)) closeDrawer();
+      await refreshTasks();
+      if (state.showArchived) await loadArchivedTasks();
+      return result;
+    }
+
+    async function archiveAllDone() {
+      const ids = doneTasksSorted().map((task) => task.id);
+      if (!ids.length) return;
+      const confirmed = window.confirm(`确认将 ${ids.length} 个已完成任务全部归档？归档后将从看板移出。`);
+      if (!confirmed) return;
+      await archiveTasks(ids);
+    }
+
+    function renderDoneColumn(column) {
+      const sorted = doneTasksSorted();
+      const { visible, hiddenCount, total } = limitDoneTasksForDisplay(sorted, state.doneExpanded);
+      column.querySelector('.count').textContent = total;
+      const actions = column.querySelector('.column-actions');
+      actions.innerHTML = total
+        ? `<button type="button" data-archive-all title="归档全部已完成">批量归档</button>`
+        : '';
+      column.querySelector('.cards').innerHTML = visible.map((task, index) => renderTaskCard(task, { index, group: 'done' })).join('');
+      const footer = column.querySelector('.column-footer');
+      footer.innerHTML = hiddenCount
+        ? `<button type="button" data-expand-done>还有 ${hiddenCount} 个，展开全部</button>`
+        : (state.doneExpanded && total > window.TaskDisplay.DONE_VISIBLE_DEFAULT
+          ? `<button type="button" data-collapse-done>收起</button>`
+          : '');
+      actions.querySelector('[data-archive-all]')?.addEventListener('click', archiveAllDone);
+      footer.querySelector('[data-expand-done]')?.addEventListener('click', () => {
+        state.doneExpanded = true;
+        renderBoard();
+      });
+      footer.querySelector('[data-collapse-done]')?.addEventListener('click', () => {
+        state.doneExpanded = false;
+        renderBoard();
+      });
+      let archivedSection = column.querySelector('.archived-section');
+      if (!archivedSection) {
+        archivedSection = document.createElement('details');
+        archivedSection.className = 'archived-section';
+        column.appendChild(archivedSection);
+      }
+      archivedSection.innerHTML = `
+        <summary>已归档 <span class="count">${state.archivedTasks.length}</span></summary>
+        <div class="cards archived-cards"></div>`;
+      archivedSection.open = state.showArchived;
+      archivedSection.ontoggle = async () => {
+        state.showArchived = archivedSection.open;
+        if (state.showArchived && !state.archivedTasks.length) await loadArchivedTasks();
+        renderBoard();
+      };
+      archivedSection.querySelector('.archived-cards').innerHTML = state.showArchived
+        ? sortTasksForGroup(state.archivedTasks, 'done').map((task) => renderTaskCard(task)).join('')
+        : '';
+    }
+
+    function renderLiveLog(chunks){
+      const box=$('drawerLiveBox');
+      if(!box)return;
+      box.innerHTML=renderLogChunksHtml(chunks);
+      box.scrollTop=box.scrollHeight;
+    }
+
+    function renderSummary(task){
+      const box=$('drawerSummaryBox');
+      if(!box)return;
+      const summary=resolveTaskSummary(task);
+      const hasSummary=Boolean(String(task?.result_summary||'').trim());
+      box.classList.toggle('placeholder',!hasSummary);
+      box.innerHTML=hasSummary?markdown(summary):escapeHtml(summary);
+    }
+
+    async function loadHome(){
+      state.projects=await api('/api/projects');
+      $('projectGrid').innerHTML=state.projects.map(project=>`
+        <a class="project-card" href="/?project=${encodeURIComponent(project.id)}" target="_blank">
+          <h2>${escapeHtml(project.name)} ${project.type==='machine'?'<span class="badge">系统</span>':''}</h2>
+          <div class="path">${escapeHtml(project.workdir||'每次任务指定本地目录')}</div>
+          <div class="stats">
+            <span><b>${project.counts.pending||0}</b>待执行</span>
+            <span><b>${(project.counts.developing||0)+(project.counts.running||0)+(project.counts.planning||0)}</b>运行中</span>
+            <span><b>${project.counts.testing||0}</b>测试中</span>
+            <span><b>${(project.counts.pending_deploy||0)+(project.counts.deploying||0)}</b>待部署</span>
+            <span><b>${(project.counts.awaiting_input||0)+(project.counts.pending_approval||0)}</b>待确认</span>
+          </div>
+        </a>`).join('');
+    }
+
+    async function createProject(){
+      $('projectError').textContent='';
+      try{
+        await api('/api/projects',{method:'POST',body:JSON.stringify({
+          name:$('projectName').value.trim(),
+          workdir:$('projectWorkdir').value.trim(),
+          deployCommand:$('projectDeployCommand').value.trim()
+        })});
+        $('projectName').value='';$('projectWorkdir').value='';$('projectDeployCommand').value='';await loadHome();
+      }catch(error){$('projectError').textContent=error.message}
+    }
+
+    function renderBoard(){
+      document.querySelectorAll('.column').forEach(column=>{
+        const group=column.dataset.group;
+        if(group==='done'){
+          renderDoneColumn(column);
+          return;
+        }
+        column.classList.toggle('stack-column',group==='pending');
+        const tasks=sortTasksForGroup(
+          state.tasks.filter(task=>statusGroup(task.status)===group),
+          group
+        );
+        column.querySelector('.count').textContent=tasks.length;
+        column.querySelector('.cards').innerHTML=tasks.map((task,index)=>renderTaskCard(task,{
+          queueHead: group==='pending'&&index===tasks.length-1,
+        })).join('');
+      });
+      document.querySelectorAll('[data-task]').forEach(card=>card.onclick=()=>selectTask(card.dataset.task));
+      if(state.selectedId)renderDrawer();
+    }
+
+    async function loadProject(){
+      state.project=await api(`/api/projects/${state.projectId}`);
+      state.tasks=await api(`/api/tasks?projectId=${encodeURIComponent(state.projectId)}`);
+      state.archivedTasks=[];
+      state.doneExpanded=false;
+      state.showArchived=false;
+      state.rules=await api(`/api/projects/${state.projectId}/rules`);
+      $('pageTitle').textContent=state.project.name;
+      $('projectHeading').textContent=state.project.name;
+      $('projectPath').textContent=state.project.workdir||'本机动态目录';
+      $('workdirGroup').classList.toggle('hidden',state.project.type!=='machine');
+      renderProjectDeploy();
+      renderTemplateOptions();
+      renderTemplateFields();
+      renderModelOptions();
+      renderRules();renderBoard();updateQueue();
+    }
+
+    function renderProjectDeploy(){
+      const machine=state.project.type==='machine';
+      $('projectDeployBar').classList.toggle('hidden',machine);
+      if(machine)return;
+      const pending=state.tasks.filter(task=>task.status==='pending_deploy').length;
+      const status=state.project.deploy_status||'idle';
+      $('deployCommandInput').value=state.project.deploy_command||'';
+      $('deployProjectBtn').textContent=`部署（${pending}）`;
+      $('deployProjectBtn').disabled=!pending||!state.project.deploy_command||['deploying','fixing'].includes(status);
+      $('saveDeployCommandBtn').disabled=['deploying','fixing'].includes(status);
+      const labels={
+        idle:'未部署',deploying:'部署中…',success:'最近部署成功',
+        awaiting_fix:'部署失败，等待确认修复',fixing:'Agent 修复中…',failed:'部署失败'
+      };
+      $('deployProjectStatus').textContent=labels[status]||status;
+      $('deployProjectStatus').title=state.project.deploy_error||'';
+      const awaiting=status==='awaiting_fix';
+      $('approveDeployFixBtn').classList.toggle('hidden',!awaiting);
+      $('rejectDeployFixBtn').classList.toggle('hidden',!awaiting);
+    }
+
+    async function saveDeployCommand(){
+      state.project=await api(`/api/projects/${state.projectId}/deploy-command`,{
+        method:'PATCH',
+        body:JSON.stringify({deployCommand:$('deployCommandInput').value.trim()})
+      });
+      renderProjectDeploy();
+    }
+
+    async function deployProject(){
+      $('deployProjectBtn').disabled=true;
+      $('deployProjectStatus').textContent='部署中…';
+      try{
+        const result=await api(`/api/projects/${state.projectId}/deploy`,{method:'POST'});
+        state.project=result.project;
+        await refreshTasks();
+        renderProjectDeploy();
+      }catch(error){
+        $('deployProjectStatus').textContent=error.message;
+        await loadProject();
+      }
+    }
+
+    async function respondDeployRepair(approved){
+      $('approveDeployFixBtn').disabled=true;
+      $('rejectDeployFixBtn').disabled=true;
+      try{
+        const result=await api(`/api/projects/${state.projectId}/deploy/repair`,{
+          method:'POST',
+          body:JSON.stringify({approved})
+        });
+        state.project=result.project;
+        await refreshTasks();
+        renderProjectDeploy();
+      }finally{
+        $('approveDeployFixBtn').disabled=false;
+        $('rejectDeployFixBtn').disabled=false;
+      }
+    }
+
+    function renderRules(){
+      $('rulesPanel').innerHTML=`<details class="rule-section">
+        <summary>Cursor Rules <span class="badge">${state.rules.length}</span></summary>`+
+        (state.project.type==='machine'?'<p class="muted">本机项目不绑定仓库 Rules。</p>':
+        state.rules.length?state.rules.map(rule=>`
+          <details class="rule"><summary>${escapeHtml(rule.name)}</summary>
+            <div class="meta">${escapeHtml(rule.relativePath)}</div>
+            <div class="markdown">${markdown(rule.content)}</div>
+          </details>`).join(''):'<p class="muted">未发现 .cursor/rules/*.mdc</p>')+
+        `</details>`;
+    }
+
+    async function createTask(){
+      $('taskError').textContent='';
+      try{
+        await api('/api/tasks',{method:'POST',body:JSON.stringify({
+          projectId:state.projectId,
+          title:$('complexInput').checked&&!$('pipelineInput').checked?$('titleInput').value.trim():'',
+          template:$('templateSelect').value,
+          workdir:state.project.type==='machine'?$('workdirInput').value.trim():null,
+          isComplex:$('complexInput').checked&&!$('pipelineInput').checked,
+          pipelineMode:$('pipelineInput').checked||Boolean(selectedTemplate()?.pipeline||selectedTemplate()?.category==='开发'),
+          modelId:$('modelSelect').value||null,
+          variables:collectVariables(),
+          attachments:collectAttachments()
+        })});
+        resetTaskForm();
+        await refreshTasks();
+      }catch(error){$('taskError').textContent=error.message}
+    }
+
+    async function refreshTasks(){
+      state.tasks=await api(`/api/tasks?projectId=${encodeURIComponent(state.projectId)}`);
+      if(state.showArchived)await loadArchivedTasks();
+      renderBoard();
+      renderProjectDeploy();
+      if(state.selectedId)renderDrawer();
+    }
+    async function selectTask(id){
+      state.selectedId=id;
+      const events=await api(`/api/tasks/${id}/events`);
+      state.logChunks[id]=parseTaskLogEvents(events);
+      renderBoard();
+      openDrawer();
+    }
+
+    function openDrawer(){
+      $('taskDrawer').classList.remove('hidden');
+      $('drawerBackdrop').classList.remove('hidden');
+      renderDrawer();
+    }
+
+    function closeDrawer(){
+      state.selectedId=null;
+      $('taskDrawer').classList.add('hidden');
+      $('drawerBackdrop').classList.add('hidden');
+      renderBoard();
+    }
+
+    function renderInteraction(task){
+      const interaction=task.interaction;if(!interaction)return '';
+      if(interaction.type==='plan')return `
+        <div class="interaction"><h3>${escapeHtml(interaction.name||'执行计划')}</h3>
+          <div class="markdown">${markdown(interaction.plan)}</div>
+          <label>拒绝原因（拒绝时可填）</label><textarea id="planReason"></textarea>
+          <div class="toolbar"><button class="primary" onclick="respondPlan(true)">批准并执行</button><button onclick="respondPlan(false)">拒绝并继续规划</button></div>
+        </div>`;
+      return `<div class="interaction"><h3>${escapeHtml(interaction.title||'需要你的回答')}</h3>
+        ${(interaction.questions||[]).map(question=>`
+          <div class="question" data-question="${escapeHtml(question.id)}" data-multiple="${question.allowMultiple?'1':'0'}">
+            <p><strong>${escapeHtml(question.prompt)}</strong></p>
+            ${(question.options||[]).map(option=>`<label class="option"><input type="${question.allowMultiple?'checkbox':'radio'}" name="q-${escapeHtml(question.id)}" value="${escapeHtml(option.id)}">${escapeHtml(option.label)}</label>`).join('')}
+          </div>`).join('')}
+        <button class="primary" onclick="respondQuestions()">提交回答</button>
+      </div>`;
+    }
+
+    function renderDrawer(){
+      const task=state.tasks.find(item=>item.id===state.selectedId)
+        ||state.archivedTasks.find(item=>item.id===state.selectedId);
+      if(!task){
+        closeDrawer();
+        return;
+      }
+      $('drawerTitle').textContent=task.title;
+      $('drawerMeta').textContent=`${statusLabel(task.status)} · ${modelName(task.model_id)}${task.pipeline_phase?` · ${task.pipeline_phase}`:''}`;
+      $('drawerDetail').innerHTML=`
+        ${renderInteraction(task)}
+        ${task.error_message?`<div class="error">${escapeHtml(task.error_message)}</div>`:''}
+        ${['failed','needs_human'].includes(task.status)?'<button id="retryBtn">重新入队</button>':''}
+        ${task.status==='done'?'<button id="iterateBtn">迭代任务</button>':''}
+        ${task.status==='done'&&!task.archived?'<button id="archiveBtn">归档</button>':''}`;
+      renderSummary(task);
+      renderLiveLog(state.logChunks[task.id]||[]);
+      const retry=$('retryBtn');
+      if(retry)retry.onclick=async()=>{await api(`/api/tasks/${task.id}/retry`,{method:'POST'});await refreshTasks()};
+      const iterateBtn=$('iterateBtn');
+      if(iterateBtn)iterateBtn.onclick=()=>openIterateModal(task.id);
+      const archiveBtn=$('archiveBtn');
+      if(archiveBtn)archiveBtn.onclick=async()=>{await archiveTasks([task.id])};
+    }
+
+    function openIterateModal(taskId){
+      state.iterateSourceId=taskId;
+      $('iterateRequirement').value='';
+      $('iterateError').textContent='';
+      $('iterateModal').classList.remove('hidden');
+      $('iterateRequirement').focus();
+    }
+
+    function closeIterateModal(){
+      state.iterateSourceId=null;
+      $('iterateModal').classList.add('hidden');
+      $('iterateError').textContent='';
+    }
+
+    async function submitIteration(){
+      $('iterateError').textContent='';
+      const requirement=$('iterateRequirement').value.trim();
+      if(!requirement){
+        $('iterateError').textContent='请填写优化需求';
+        return;
+      }
+      if(!state.iterateSourceId)return;
+      $('iterateSubmitBtn').disabled=true;
+      try{
+        const task=await api(`/api/tasks/${state.iterateSourceId}/iterate`,{
+          method:'POST',
+          body:JSON.stringify({requirement}),
+        });
+        closeIterateModal();
+        closeDrawer();
+        state.selectedId=task.id;
+        await refreshTasks();
+        const events=await api(`/api/tasks/${task.id}/events`);
+        state.logChunks[task.id]=parseTaskLogEvents(events);
+        openDrawer();
+      }catch(error){
+        $('iterateError').textContent=error.message;
+      }finally{
+        $('iterateSubmitBtn').disabled=false;
+      }
+    }
+
+    async function respondPlan(accepted){
+      await api(`/api/tasks/${state.selectedId}/interaction`,{method:'POST',body:JSON.stringify({accepted,reason:$('planReason')?.value||''})});
+      await refreshTasks();
+    }
+    async function respondQuestions(){
+      const answers=Array.from(document.querySelectorAll('.question')).map(question=>({
+        questionId:question.dataset.question,
+        selectedOptionIds:Array.from(question.querySelectorAll('input:checked')).map(input=>input.value)
+      }));
+      await api(`/api/tasks/${state.selectedId}/interaction`,{method:'POST',body:JSON.stringify({answers})});
+      await refreshTasks();
+    }
+    window.respondPlan=respondPlan;window.respondQuestions=respondQuestions;
+
+    function connectSse(){
+      const source=new EventSource(`/api/events?token=${encodeURIComponent(state.token)}`);
+      source.onopen=()=>{$('connState').textContent='实时连接'};
+      source.onerror=()=>{$('connState').textContent='连接中断'};
+      ['task:created','task:status','task:interaction','task:archived'].forEach(name=>source.addEventListener(name,event=>{
+        const payload=JSON.parse(event.data);
+        if(state.projectId&&((payload.project_id===state.projectId)||state.tasks.some(task=>task.id===payload.id)))refreshTasks();
+      }));
+      ['project:deploy','project:updated'].forEach(name=>source.addEventListener(name,event=>{
+        const payload=JSON.parse(event.data);
+        if(state.projectId&&payload.id===state.projectId){
+          state.project={...state.project,...payload};
+          refreshTasks().then(renderProjectDeploy);
+        }
+      }));
+      source.addEventListener('task:log',event=>{
+        const payload=JSON.parse(event.data);
+        state.logChunks[payload.id]=appendLogChunk(state.logChunks[payload.id],payload);
+        if(payload.id===state.selectedId)renderLiveLog(state.logChunks[payload.id]);
+      });
+      source.addEventListener('task:permission',event=>{
+        const payload=JSON.parse(event.data);
+        state.logChunks[payload.id]=appendPermissionChunk(state.logChunks[payload.id],payload);
+        if(payload.id===state.selectedId)renderLiveLog(state.logChunks[payload.id]);
+      });
+    }
+
+    async function updateQueue(){
+      const health=await api('/api/health');
+      $('queueState').textContent=`并行 ${health.runningTaskIds.length}/${health.maxConcurrent}`;
+    }
+
+    async function init(){
+      await bootstrap();connectSse();
+      if(state.projectId){
+        $('homeView').classList.add('hidden');$('projectView').classList.remove('hidden');$('homeBtn').classList.remove('hidden');
+        $('createTaskBtn').onclick=createTask;$('refreshBtn').onclick=loadProject;
+        $('saveDeployCommandBtn').onclick=saveDeployCommand;
+        $('deployProjectBtn').onclick=deployProject;
+        $('approveDeployFixBtn').onclick=()=>respondDeployRepair(true);
+        $('rejectDeployFixBtn').onclick=()=>respondDeployRepair(false);
+        $('drawerCloseBtn').onclick=closeDrawer;
+        $('drawerBackdrop').onclick=closeDrawer;
+        $('iterateCancelBtn').onclick=closeIterateModal;
+        $('iterateSubmitBtn').onclick=submitIteration;
+        $('iterateModal').onclick=(event)=>{
+          if(event.target===$('iterateModal'))closeIterateModal();
+        };
+        $('complexInput').onchange=()=>{if($('complexInput').checked)$('pipelineInput').checked=false;renderModelOptions();updateTitlePreview();};
+        $('pipelineInput').onchange=()=>{if($('pipelineInput').checked){$('complexInput').checked=false;$('complexInput').disabled=true}else{$('complexInput').disabled=false}renderModelOptions();updateTitlePreview();};
+        $('templateSelect').onchange=()=>{syncTemplateSelection();renderTemplateFields();updateTitlePreview();};
+        await loadProject();
+      }else{
+        $('createProjectBtn').onclick=createProject;await loadHome();
+      }
+    }
+    init().catch(error=>{document.body.insertAdjacentHTML('beforeend',`<div class="error">${escapeHtml(error.message)}</div>`)});
+  </script>
+</body>
+</html>

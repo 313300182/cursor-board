@@ -1,0 +1,5 @@
+node_modules/
+data/
+*.db
+probe-test.txt
+shell-out.txt

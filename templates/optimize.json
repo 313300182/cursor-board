@@ -1,0 +1,32 @@
+{
+  "id": "optimize",
+  "name": "性能优化",
+  "category": "质量",
+  "order": 2,
+  "description": "分析并优化代码性能、资源占用或响应速度，给出可量化的改进建议",
+  "variables": [
+    {
+      "name": "target",
+      "required": true,
+      "label": "优化目标",
+      "input": "textarea",
+      "images": true,
+      "placeholder": "例如：减少订单列表接口的响应时间，或降低内存占用（支持粘贴截图）"
+    },
+    {
+      "name": "scope",
+      "required": false,
+      "label": "优化范围",
+      "input": "input",
+      "placeholder": "可选，例如：src/service/OrderService.java"
+    },
+    {
+      "name": "constraints",
+      "required": false,
+      "label": "约束条件",
+      "input": "textarea",
+      "placeholder": "可选，例如：不能改变对外 API、需兼容 Java 8"
+    }
+  ],
+  "prompt": "工作目录：{{workdir}}\n\n优化目标：{{target}}\n优化范围：{{scope}}\n约束条件：{{constraints}}\n\n要求：\n- 先分析瓶颈，再提出并实施优化方案\n- 优先做低风险、可验证的改动\n- 如有基准数据，优化前后尽量给出对比\n- 不要修改与优化无关的文件\n- 完成后说明改了哪些文件，以及预期收益"
+}

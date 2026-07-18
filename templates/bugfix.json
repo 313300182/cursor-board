@@ -1,0 +1,25 @@
+{
+  "id": "bugfix",
+  "name": "修复 Bug",
+  "category": "开发",
+  "order": 3,
+  "description": "定位并修复项目中的缺陷，尽量附带测试验证",
+  "variables": [
+    {
+      "name": "description",
+      "required": true,
+      "label": "Bug 描述",
+      "input": "textarea",
+      "images": true,
+      "placeholder": "描述问题现象、复现步骤、期望行为（支持粘贴截图）"
+    },
+    {
+      "name": "location",
+      "required": false,
+      "label": "疑似位置",
+      "input": "input",
+      "placeholder": "可选，例如：OrderController.checkout 接口"
+    }
+  ],
+  "prompt": "工作目录：{{workdir}}\n\n修复以下 Bug：{{description}}\n疑似位置：{{location}}\n\n要求：\n- 先定位问题根因，再修复\n- 尽量运行现有测试验证\n- 不要修改无关文件\n- 完成后说明改了哪些文件\n- 此任务为流水线模式：先完成开发，系统会自动进入测试与部署；测试/部署命令由 AI 根据项目配置自动识别"
+}

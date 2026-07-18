@@ -1,0 +1,71 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 3920
+  },
+  "cursor": {
+    "bin": "agent",
+    "taskTimeoutMs": 1800000,
+    "models": {
+      "simpleDefault": "gpt-5.6-luna[context=272k,reasoning=medium,fast=false]",
+      "complexDefault": "claude-opus-4-8[thinking=true,context=300k,effort=high,fast=false]",
+      "options": [
+        {
+          "id": "gpt-5.6-luna[context=272k,reasoning=medium,fast=false]",
+          "name": "GPT-5.6 Luna"
+        },
+        {
+          "id": "claude-opus-4-8[thinking=true,context=300k,effort=high,fast=false]",
+          "name": "Opus 4.8 High"
+        },
+        {
+          "id": "composer-2.5[fast=true]",
+          "name": "Composer 2.5"
+        },
+        {
+          "id": "gpt-5.6-sol[context=272k,reasoning=medium,fast=false]",
+          "name": "GPT-5.6 Sol"
+        },
+        {
+          "id": "claude-sonnet-5[thinking=true,context=300k,effort=high]",
+          "name": "Sonnet 5 High"
+        },
+        {
+          "id": "grok-4.5[effort=high,fast=false]",
+          "name": "Cursor Grok 4.5 High"
+        },
+        {
+          "id": "gpt-5.3-codex[reasoning=medium,fast=false]",
+          "name": "Codex 5.3"
+        },
+        {
+          "id": "gemini-3.1-pro[]",
+          "name": "Gemini 3.1 Pro"
+        }
+      ]
+    }
+  },
+  "security": {
+    "workdirAllowlist": [
+      "C:\\",
+      "D:\\",
+      "E:\\",
+      "F:\\",
+      "H:\\",
+      "M:\\"
+    ],
+    "denyPatterns": [
+      "rm\\s+-rf",
+      "git\\s+push\\s+--force",
+      "format\\s+[a-z]:",
+      "\\.env",
+      "reg\\s+(add|delete)",
+      "curl.*\\|\\s*(ba)?sh"
+    ],
+    "autoApprove": true,
+    "autoAcceptPlan": true
+  },
+  "queue": {
+    "maxConcurrent": 3
+  }
+}

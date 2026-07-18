@@ -1,0 +1,25 @@
+{
+  "id": "refactor",
+  "name": "代码重构",
+  "category": "开发",
+  "order": 4,
+  "description": "在不改变外部行为的前提下，改善代码结构与可维护性",
+  "variables": [
+    {
+      "name": "target",
+      "required": true,
+      "label": "重构目标",
+      "input": "textarea",
+      "images": true,
+      "placeholder": "例如：拆分 OrderService 中的过长方法，消除重复逻辑（支持粘贴截图）"
+    },
+    {
+      "name": "scope",
+      "required": false,
+      "label": "重构范围",
+      "input": "input",
+      "placeholder": "可选，例如：src/service/order/"
+    }
+  ],
+  "prompt": "工作目录：{{workdir}}\n\n重构目标：{{target}}\n重构范围：{{scope}}\n\n要求：\n- 保持现有行为不变，优先小步重构\n- 重构后尽量运行现有测试\n- 不要引入无关功能变更\n- 完成后说明改了哪些文件，以及结构上的改进点"
+}

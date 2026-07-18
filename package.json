@@ -1,0 +1,19 @@
+{
+  "name": "cursor-board",
+  "version": "0.1.0",
+  "description": "Personal kanban board with Cursor Agent ACP auto-approval",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "deploy": "node scripts/deploy-board.js",
+    "probe": "node scripts/acp-probe.js",
+    "test": "node --test test/*.test.js"
+  },
+  "author": "Amadeus",
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "^11.9.1",
+    "express": "^4.21.2",
+    "uuid": "^11.1.0"
+  }
+}

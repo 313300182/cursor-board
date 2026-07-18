@@ -1,0 +1,18 @@
+{
+  "id": "general",
+  "name": "通用任务",
+  "category": "通用",
+  "order": 1,
+  "description": "任意本地开发或文件处理任务，适合没有明确分类的场景",
+  "variables": [
+    {
+      "name": "description",
+      "required": true,
+      "label": "任务描述",
+      "input": "textarea",
+      "images": true,
+      "placeholder": "描述你希望 Agent 完成的具体任务（支持粘贴截图）"
+    }
+  ],
+  "prompt": "工作目录：{{workdir}}\n\n任务：{{description}}\n\n要求：\n- 在当前工作目录完成任务\n- 完成后给出简洁的结果摘要"
+}

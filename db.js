@@ -1,0 +1,453 @@
+const fs = require('fs');
+const path = require('path');
+const Database = require('better-sqlite3');
+
+const DATA_DIR = path.join(__dirname, 'data');
+
+function ensureDataDir() {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+}
+
+function ensureColumn(db, table, name, definition) {
+  const columns = db.pragma(`table_info(${table})`);
+  if (!columns.some((column) => column.name === name)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
+  }
+}
+
+function ensureSchema(db) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS projects (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'normal',
+      workdir TEXT,
+      deploy_command TEXT,
+      deploy_status TEXT,
+      deploy_error TEXT,
+      deploy_started_at TEXT,
+      deploy_finished_at TEXT,
+      is_system INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS tasks (
+      id TEXT PRIMARY KEY,
+      project_id TEXT,
+      title TEXT NOT NULL,
+      template TEXT NOT NULL,
+      variables TEXT NOT NULL DEFAULT '{}',
+      workdir TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      is_complex INTEGER NOT NULL DEFAULT 0,
+      model_id TEXT,
+      prompt_rendered TEXT,
+      plan_text TEXT,
+      interaction_json TEXT,
+      result_summary TEXT,
+      error_message TEXT,
+      created_at TEXT NOT NULL,
+      started_at TEXT,
+      finished_at TEXT,
+      FOREIGN KEY (project_id) REFERENCES projects(id)
+    );
+    CREATE TABLE IF NOT EXISTS task_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      payload TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (task_id) REFERENCES tasks(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+    CREATE INDEX IF NOT EXISTS idx_task_events_task_id ON task_events(task_id);
+  `);
+  ensureColumn(db, 'tasks', 'project_id', 'TEXT');
+  ensureColumn(db, 'tasks', 'is_complex', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn(db, 'tasks', 'plan_text', 'TEXT');
+  ensureColumn(db, 'tasks', 'interaction_json', 'TEXT');
+  ensureColumn(db, 'tasks', 'model_id', 'TEXT');
+  ensureColumn(db, 'tasks', 'attachments_json', 'TEXT');
+  ensureColumn(db, 'tasks', 'pipeline_mode', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn(db, 'tasks', 'pipeline_phase', 'TEXT');
+  ensureColumn(db, 'tasks', 'deploy_completed', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn(db, 'tasks', 'archived', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn(db, 'tasks', 'archived_at', 'TEXT');
+  ensureColumn(db, 'tasks', 'session_id', 'TEXT');
+  ensureColumn(db, 'tasks', 'parent_task_id', 'TEXT');
+  ensureColumn(db, 'projects', 'deploy_command', 'TEXT');
+  ensureColumn(db, 'projects', 'deploy_status', 'TEXT');
+  ensureColumn(db, 'projects', 'deploy_error', 'TEXT');
+  ensureColumn(db, 'projects', 'deploy_started_at', 'TEXT');
+  ensureColumn(db, 'projects', 'deploy_finished_at', 'TEXT');
+  db.exec("UPDATE tasks SET deploy_completed = 1 WHERE status = 'done' AND deploy_completed = 0");
+  db.exec('CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_tasks_archived ON tasks(archived)');
+}
+
+function openDb() {
+  ensureDataDir();
+  const db = new Database(path.join(DATA_DIR, 'tasks.db'));
+  db.pragma('journal_mode = WAL');
+  ensureSchema(db);
+  return db;
+}
+
+function mapTask(row) {
+  if (!row) return null;
+  return {
+    ...row,
+    variables: JSON.parse(row.variables || '{}'),
+    attachments: row.attachments_json ? JSON.parse(row.attachments_json) : [],
+    is_complex: Boolean(row.is_complex),
+    pipeline_mode: Boolean(row.pipeline_mode),
+    pipeline_phase: row.pipeline_phase || null,
+    deploy_completed: Boolean(row.deploy_completed),
+    archived: Boolean(row.archived),
+    archived_at: row.archived_at || null,
+    session_id: row.session_id || null,
+    parent_task_id: row.parent_task_id || null,
+    interaction: row.interaction_json ? JSON.parse(row.interaction_json) : null,
+  };
+}
+
+function mapProject(row) {
+  return row || null;
+}
+
+function createProjectRepo(db) {
+  return {
+    ensureMachineProject() {
+      const existing = db.prepare("SELECT * FROM projects WHERE type = 'machine'").get();
+      if (existing) return mapProject(existing);
+      db.prepare(`
+        INSERT INTO projects (
+          id, name, type, workdir, deploy_command, is_system, created_at
+        ) VALUES ('machine', '本机', 'machine', NULL, NULL, 1, ?)
+      `).run(new Date().toISOString());
+      return this.getProject('machine');
+    },
+
+    createProject(project) {
+      db.prepare(`
+        INSERT INTO projects (
+          id, name, type, workdir, deploy_command, is_system, created_at
+        ) VALUES (
+          @id, @name, @type, @workdir, @deploy_command, @is_system, @created_at
+        )
+      `).run({
+        id: project.id,
+        name: project.name,
+        type: project.type || 'normal',
+        workdir: project.workdir || null,
+        deploy_command: project.type === 'machine' ? null : (project.deploy_command || null),
+        is_system: project.is_system || 0,
+        created_at: project.created_at,
+      });
+      return this.getProject(project.id);
+    },
+
+    getProject(id) {
+      return mapProject(db.prepare('SELECT * FROM projects WHERE id = ?').get(id));
+    },
+
+    listProjects() {
+      return db.prepare('SELECT * FROM projects ORDER BY is_system DESC, created_at ASC').all();
+    },
+
+    updateDeployCommand(id, deployCommand) {
+      const project = this.getProject(id);
+      if (!project) throw new Error('项目不存在');
+      if (project.type === 'machine') throw new Error('本机项目不支持部署');
+      db.prepare('UPDATE projects SET deploy_command = ? WHERE id = ?')
+        .run(String(deployCommand || '').trim() || null, id);
+      return this.getProject(id);
+    },
+
+    ensureDeployCommandForWorkdir(workdir, deployCommand) {
+      db.prepare(`
+        UPDATE projects
+        SET deploy_command = ?
+        WHERE type != 'machine'
+          AND lower(workdir) = lower(?)
+          AND (deploy_command IS NULL OR trim(deploy_command) = '')
+      `).run(deployCommand, workdir);
+    },
+
+    updateDeployState(id, patch) {
+      const fields = [
+        'deploy_status',
+        'deploy_error',
+        'deploy_started_at',
+        'deploy_finished_at',
+      ];
+      const entries = fields.filter((field) => Object.prototype.hasOwnProperty.call(patch, field));
+      if (!entries.length) return this.getProject(id);
+      const assignments = entries.map((field) => `${field} = @${field}`).join(', ');
+      db.prepare(`UPDATE projects SET ${assignments} WHERE id = @id`).run({ id, ...patch });
+      return this.getProject(id);
+    },
+
+    deleteProject(id) {
+      const project = this.getProject(id);
+      if (!project) throw new Error('项目不存在');
+      if (project.is_system) throw new Error('系统项目不能删除');
+      const count = db.prepare('SELECT COUNT(*) AS count FROM tasks WHERE project_id = ?').get(id).count;
+      if (count > 0) throw new Error('项目下存在任务，不能删除');
+      db.prepare('DELETE FROM projects WHERE id = ?').run(id);
+    },
+  };
+}
+
+function createTaskRepo(db) {
+  const insertTask = db.prepare(`
+    INSERT INTO tasks (
+      id, project_id, title, template, variables, attachments_json, workdir, status,
+      is_complex, pipeline_mode, model_id, prompt_rendered, parent_task_id, created_at
+    ) VALUES (
+      @id, @project_id, @title, @template, @variables, @attachments_json, @workdir, @status,
+      @is_complex, @pipeline_mode, @model_id, @prompt_rendered, @parent_task_id, @created_at
+    )
+  `);
+
+  const insertEvent = db.prepare(`
+    INSERT INTO task_events (task_id, type, payload, created_at)
+    VALUES (@task_id, @type, @payload, @created_at)
+  `);
+
+  return {
+    createTask(task) {
+      insertTask.run({
+        id: task.id,
+        project_id: task.project_id || null,
+        title: task.title,
+        template: task.template,
+        variables: JSON.stringify(task.variables || {}),
+        attachments_json: JSON.stringify(task.attachments || []),
+        workdir: task.workdir,
+        status: task.status,
+        is_complex: task.is_complex ? 1 : 0,
+        pipeline_mode: task.pipeline_mode ? 1 : 0,
+        model_id: task.model_id || null,
+        prompt_rendered: task.prompt_rendered,
+        parent_task_id: task.parent_task_id || null,
+        created_at: task.created_at,
+      });
+      return this.getTask(task.id);
+    },
+
+    getTask(id) {
+      return mapTask(db.prepare('SELECT * FROM tasks WHERE id = ?').get(id));
+    },
+
+    listTasks(status, projectId, options = {}) {
+      const clauses = [];
+      const params = [];
+      if (status) {
+        clauses.push('status = ?');
+        params.push(status);
+      }
+      if (projectId) {
+        clauses.push('project_id = ?');
+        params.push(projectId);
+      }
+      if (options.archived === true) {
+        clauses.push('archived = 1');
+      } else if (options.archived !== 'all') {
+        clauses.push('archived = 0');
+      }
+      const where = clauses.length ? ` WHERE ${clauses.join(' AND ')}` : '';
+      return db.prepare(`SELECT * FROM tasks${where} ORDER BY created_at ASC`).all(...params).map(mapTask);
+    },
+
+    updateStatus(id, patch) {
+      const fields = [
+        'status',
+        'result_summary',
+        'error_message',
+        'started_at',
+        'finished_at',
+        'pipeline_phase',
+        'deploy_completed',
+        'session_id',
+      ];
+      const entries = fields.filter((field) => Object.prototype.hasOwnProperty.call(patch, field));
+      if (entries.length === 0) return this.getTask(id);
+      const assignments = entries.map((field) => `${field} = @${field}`).join(', ');
+      db.prepare(`UPDATE tasks SET ${assignments} WHERE id = @id`).run({ id, ...patch });
+      return this.getTask(id);
+    },
+
+    setInteraction(id, interaction) {
+      db.prepare('UPDATE tasks SET interaction_json = ? WHERE id = ?')
+        .run(interaction ? JSON.stringify(interaction) : null, id);
+      return this.getTask(id);
+    },
+
+    setPlan(id, planText) {
+      db.prepare('UPDATE tasks SET plan_text = ? WHERE id = ?').run(planText || null, id);
+      return this.getTask(id);
+    },
+
+    assignUnscopedTasks(projectId) {
+      return db.prepare('UPDATE tasks SET project_id = ? WHERE project_id IS NULL').run(projectId).changes;
+    },
+
+    countByProject(projectId) {
+      const rows = db.prepare(`
+        SELECT status, COUNT(*) AS count
+        FROM tasks
+        WHERE project_id = ? AND archived = 0
+        GROUP BY status
+      `).all(projectId);
+      return Object.fromEntries(rows.map((row) => [row.status, row.count]));
+    },
+
+    countArchivedByProject(projectId) {
+      const row = db.prepare(`
+        SELECT COUNT(*) AS count
+        FROM tasks
+        WHERE project_id = ? AND archived = 1
+      `).get(projectId);
+      return row?.count || 0;
+    },
+
+    archiveTasks(ids, projectId) {
+      if (!ids?.length) return [];
+      const now = new Date().toISOString();
+      const stmt = db.prepare(`
+        UPDATE tasks
+        SET archived = 1,
+            archived_at = @now
+        WHERE id = @id
+          AND status = 'done'
+          AND archived = 0
+          AND project_id = @project_id
+      `);
+      const archived = [];
+      for (const id of ids) {
+        const result = stmt.run({ id, now, project_id: projectId });
+        if (result.changes > 0) {
+          archived.push(this.getTask(id));
+        }
+      }
+      return archived;
+    },
+
+    addEvent(taskId, type, payload) {
+      insertEvent.run({
+        task_id: taskId,
+        type,
+        payload: JSON.stringify(payload || {}),
+        created_at: new Date().toISOString(),
+      });
+    },
+
+    listEvents(taskId) {
+      return db
+        .prepare('SELECT * FROM task_events WHERE task_id = ? ORDER BY id ASC')
+        .all(taskId)
+        .map((row) => ({
+          ...row,
+          payload: JSON.parse(row.payload || '{}'),
+        }));
+    },
+
+    listPendingDeployTasks(projectId, workdir, excludeId) {
+      return db.prepare(`
+        SELECT * FROM tasks
+        WHERE project_id = @project_id
+          AND workdir = @workdir
+          AND pipeline_mode = 1
+          AND deploy_completed = 0
+          AND archived = 0
+          AND id != @exclude_id
+          AND status = 'pending_deploy'
+        ORDER BY created_at ASC
+      `).all({
+        project_id: projectId,
+        workdir,
+        exclude_id: excludeId,
+      }).map(mapTask);
+    },
+
+    listProjectPendingDeployTasks(projectId) {
+      return db.prepare(`
+        SELECT * FROM tasks
+        WHERE project_id = ?
+          AND pipeline_mode = 1
+          AND deploy_completed = 0
+          AND archived = 0
+          AND status = 'pending_deploy'
+        ORDER BY created_at ASC
+      `).all(projectId).map(mapTask);
+    },
+
+    markDeploying(ids) {
+      const stmt = db.prepare(`
+        UPDATE tasks
+        SET status = 'deploying',
+            pipeline_phase = 'deploy',
+            error_message = NULL
+        WHERE id = ?
+      `);
+      for (const id of ids) stmt.run(id);
+    },
+
+    markDeployPending(ids, error) {
+      const stmt = db.prepare(`
+        UPDATE tasks
+        SET status = 'pending_deploy',
+            pipeline_phase = 'pending_deploy',
+            error_message = ?
+        WHERE id = ?
+      `);
+      for (const id of ids) stmt.run(error || null, id);
+    },
+
+    markDeployCompleted(ids) {
+      const now = new Date().toISOString();
+      const stmt = db.prepare(`
+        UPDATE tasks
+        SET deploy_completed = 1,
+            status = 'done',
+            pipeline_phase = 'done',
+            finished_at = COALESCE(finished_at, @now),
+            error_message = NULL
+        WHERE id = @id
+      `);
+      for (const id of ids) {
+        stmt.run({ id, now });
+      }
+    },
+
+    recoverStaleRunning() {
+      const now = new Date().toISOString();
+      const stale = db
+        .prepare("SELECT id FROM tasks WHERE status IN ('planning', 'running', 'developing', 'testing', 'deploying')")
+        .all();
+      for (const row of stale) {
+        this.updateStatus(row.id, {
+          status: 'failed',
+          error_message: '服务重启，任务中断',
+          finished_at: now,
+        });
+        this.addEvent(row.id, 'status_change', {
+          status: 'failed',
+          reason: 'recover_stale_running',
+        });
+      }
+      return stale.length;
+    },
+  };
+}
+
+module.exports = {
+  DATA_DIR,
+  ensureDataDir,
+  ensureSchema,
+  openDb,
+  createProjectRepo,
+  createTaskRepo,
+};

@@ -1,0 +1,32 @@
+{
+  "id": "code-review",
+  "name": "代码 Review",
+  "category": "质量",
+  "order": 1,
+  "description": "审查指定代码的质量、安全性、可维护性与潜在风险",
+  "variables": [
+    {
+      "name": "scope",
+      "required": true,
+      "label": "审查范围",
+      "input": "textarea",
+      "images": true,
+      "placeholder": "例如：src/main/java/com/example/order/ 或 PR #42 涉及的文件（支持粘贴截图）"
+    },
+    {
+      "name": "focus",
+      "required": false,
+      "label": "关注重点",
+      "input": "input",
+      "placeholder": "可选，例如：并发安全、错误处理、SQL 注入"
+    },
+    {
+      "name": "context",
+      "required": false,
+      "label": "背景说明",
+      "input": "textarea",
+      "placeholder": "可选，例如：这是支付模块的重构分支，重点关注兼容性"
+    }
+  ],
+  "prompt": "工作目录：{{workdir}}\n\n审查范围：{{scope}}\n关注重点：{{focus}}\n背景说明：{{context}}\n\n要求：\n- 按严重程度列出问题：严重 / 建议 / 可选优化\n- 每个问题说明位置、原因与修复建议\n- 不要直接修改代码，除非明确要求修复\n- 完成后给出简洁的 Review 摘要"
+}

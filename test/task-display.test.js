@@ -164,6 +164,34 @@ test('renderLogChunksHtml 对 message 流渲染表格 Markdown', () => {
   assert.match(html, /<td>完成<\/td>/);
 });
 
+test('formatMarkdown 支持代码块、有序列表与引用', () => {
+  const md = [
+    '1. 第一步',
+    '2. 第二步',
+    '',
+    '```js',
+    'const x = 1;',
+    '```',
+    '',
+    '> 注意事项',
+  ].join('\n');
+  const html = formatMarkdown(md);
+  assert.match(html, /<ol>/);
+  assert.match(html, /<li>第一步<\/li>/);
+  assert.match(html, /<pre class="md-pre"><code>const x = 1;<\/code><\/pre>/);
+  assert.match(html, /<blockquote class="md-quote">/);
+  assert.match(html, /注意事项/);
+});
+
+test('formatMarkdown 摘要用正文字体且保留表格结构', () => {
+  const md = '**摘要**\n\n| 文件 | 状态 |\n| --- | --- |\n| a.js | 完成 |';
+  const html = formatMarkdown(md);
+  assert.match(html, /<strong>摘要<\/strong>/);
+  assert.match(html, /<th>文件<\/th>/);
+  assert.match(html, /<td>完成<\/td>/);
+  assert.doesNotMatch(html, /\| 文件 \|/);
+});
+
 test('mergeLogChunksForDisplay 合并同类型流式片段', () => {
   const merged = mergeLogChunksForDisplay([
     { stream: 'message', text: '**结论' },

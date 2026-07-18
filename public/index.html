@@ -42,7 +42,7 @@
       font-size:14px;
       line-height:1.5;
     }
-    .meta,pre,.log-stream,.summary-box,.stats b{
+    .meta,pre,.stats b{
       font-family:"JetBrains Mono",ui-monospace,"Cascadia Code",monospace;
       font-variant-numeric:tabular-nums;
     }
@@ -265,12 +265,20 @@
     }
     .markdown h1,.markdown h2,.markdown h3{margin:12px 0 6px}
     .markdown p{margin:5px 0}
-    .markdown ul{margin:5px 0 5px 18px;padding:0}
+    .markdown ul,.markdown ol{margin:5px 0 5px 18px;padding:0}
     .markdown li{margin:3px 0}
     .markdown code{background:var(--surface-hover);padding:1px 4px;border-radius:4px;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px}
     .markdown strong{font-weight:600;color:var(--text)}
+    .markdown em{font-style:italic;color:var(--text-2)}
+    .markdown a{color:var(--accent);text-decoration:none}
+    .markdown a:hover{text-decoration:underline}
+    .md-pre{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:10px;margin:8px 0;overflow-x:auto;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;line-height:1.45;white-space:pre-wrap}
+    .md-pre code{background:transparent;padding:0;border-radius:0;font-size:inherit}
+    .md-quote{margin:8px 0;padding:8px 12px;border-left:3px solid var(--border-strong);color:var(--text-2);background:color-mix(in srgb,var(--surface-2) 50%,transparent)}
+    .md-quote p{margin:4px 0}
+    .md-hr{border:none;border-top:1px solid var(--border);margin:12px 0}
     .md-table-wrap{overflow-x:auto;margin:8px 0;-webkit-overflow-scrolling:touch}
-    .md-table{width:100%;border-collapse:collapse;font-size:inherit;white-space:normal}
+    .md-table{width:100%;border-collapse:collapse;font-size:inherit;white-space:normal;font-family:inherit}
     .md-table th,.md-table td{border:1px solid var(--border);padding:6px 10px;text-align:left;vertical-align:top;line-height:1.45}
     .md-table th{background:var(--surface-2);font-weight:600;color:var(--text)}
     .md-table tbody tr:nth-child(even) td{background:color-mix(in srgb,var(--surface-2) 35%,transparent)}
@@ -411,6 +419,8 @@
       padding:10px;
       border-radius:var(--radius-lg);
       font-size:12px;
+      font-family:inherit;
+      line-height:1.55;
     }
     .task-detail-panel .log-stream,.task-detail-panel .summary-box{
       overflow:visible;
@@ -441,16 +451,21 @@
     .task-detail-conversation{display:flex;flex-direction:column;gap:12px;margin-top:2px;padding-top:14px;border-top:1px solid var(--border)}
     .log-chunk{white-space:pre-wrap;overflow-wrap:break-word;margin:0}
     .log-chunk+.log-chunk{margin-top:8px;padding-top:8px;border-top:1px dashed var(--border)}
-    .log-chunk-thinking{color:var(--st-complex);border-left:2px solid var(--st-complex);padding-left:8px}
-    .log-chunk-message{color:var(--text);line-height:1.5;white-space:normal}
-    .log-chunk-message h1,.log-chunk-message h2,.log-chunk-message h3{margin:10px 0 4px;font-size:13px}
+    .log-chunk-thinking{color:var(--st-complex);border-left:2px solid var(--st-complex);padding-left:8px;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px}
+    .log-chunk-message{color:var(--text);line-height:1.55;white-space:normal;font-family:inherit}
+    .log-chunk-message h1,.log-chunk-message h2,.log-chunk-message h3{margin:10px 0 4px;font-size:13px;font-weight:600}
     .log-chunk-message p{margin:4px 0}
-    .log-chunk-message ul{margin:4px 0 4px 18px;padding:0}
+    .log-chunk-message ul,.log-chunk-message ol{margin:4px 0 4px 18px;padding:0}
     .log-chunk-message li{margin:2px 0}
     .log-chunk-message code{background:var(--surface-hover);padding:1px 4px;border-radius:4px;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px}
     .log-chunk-message strong{font-weight:600;color:var(--text)}
+    .log-chunk-message em{font-style:italic;color:var(--text-2)}
+    .log-chunk-message a{color:var(--accent);text-decoration:none}
+    .log-chunk-message a:hover{text-decoration:underline}
+    .log-chunk-message .md-pre,.summary-box .md-pre{margin:6px 0}
     .log-chunk-message .md-table-wrap,.summary-box .md-table-wrap{margin:6px 0}
-    .summary-box.markdown{white-space:normal}
+    .summary-box.markdown{white-space:normal;font-family:inherit;color:var(--text)}
+    .summary-box.markdown p,.summary-box.markdown li{line-height:1.55}
     .log-chunk-system{color:var(--st-queued);font-size:11px;white-space:pre-wrap}
     .task-detail-close{padding:4px 10px;font-size:12px;flex-shrink:0}
     .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:110;display:flex;align-items:center;justify-content:center;padding:16px}

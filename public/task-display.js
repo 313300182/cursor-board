@@ -120,6 +120,11 @@
     let result = escapeHtml(text);
     result = result.replace(/`([^`\n]+)`/g, '<code>$1</code>');
     result = result.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+    result = result.replace(/(?<![*\w])\*([^*\n]+)\*(?![*\w])/g, '<em>$1</em>');
+    result = result.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_match, label, href) => {
+      if (!/^(https?:|mailto:|\/|#)/i.test(href)) return `[${label}](${href})`;
+      return `<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+    });
     return result;
   }
 
@@ -141,38 +146,80 @@
     return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
   }
 
-  function renderTableRow(cells, tag) {
-    return `<tr>${cells.map((cell) => `<${tag}>${formatInlineMarkdown(cell)}</${tag}>`).join('')}</tr>`;
+  function parseTableAlignments(separatorLine) {
+    return parseTableRow(separatorLine).map((cell) => {
+      const trimmed = cell.trim();
+      const left = trimmed.startsWith(':');
+      const right = trimmed.endsWith(':');
+      if (left && right) return 'center';
+      if (right) return 'right';
+      return 'left';
+    });
   }
 
-  function renderTable(headerCells, bodyRows) {
-    const thead = `<thead>${renderTableRow(headerCells, 'th')}</thead>`;
+  function renderTableRow(cells, tag, alignments) {
+    return `<tr>${cells.map((cell, index) => {
+      const align = alignments?.[index];
+      const style = align && align !== 'left' ? ` style="text-align:${align}"` : '';
+      return `<${tag}${style}>${formatInlineMarkdown(cell)}</${tag}>`;
+    }).join('')}</tr>`;
+  }
+
+  function renderTable(headerCells, bodyRows, alignments) {
+    const thead = `<thead>${renderTableRow(headerCells, 'th', alignments)}</thead>`;
     const tbody = bodyRows.length
-      ? `<tbody>${bodyRows.map((row) => renderTableRow(row, 'td')).join('')}</tbody>`
+      ? `<tbody>${bodyRows.map((row) => renderTableRow(row, 'td', alignments)).join('')}</tbody>`
       : '';
     return `<div class="md-table-wrap"><table class="md-table">${thead}${tbody}</table></div>`;
+  }
+
+  function isHorizontalRule(line) {
+    return /^(-{3,}|\*{3,}|_{3,})\s*$/.test(String(line ?? '').trim());
+  }
+
+  function isFenceOpen(line) {
+    return /^(`{3,}|~{3,})(\s*\S*)?\s*$/.test(String(line ?? '').trim());
+  }
+
+  function parseFenceClose(line, openFence) {
+    const marker = openFence.match(/^[`~]+/)[0];
+    return new RegExp(`^${marker}\\s*$`).test(String(line ?? '').trim());
   }
 
   function formatMarkdown(value) {
     const lines = String(value ?? '').split(/\r?\n/);
     const parts = [];
-    let listOpen = false;
+    let listType = null;
     let index = 0;
 
     const closeList = () => {
-      if (listOpen) {
-        parts.push('</ul>');
-        listOpen = false;
-      }
+      if (listType === 'ul') parts.push('</ul>');
+      if (listType === 'ol') parts.push('</ol>');
+      listType = null;
     };
 
     while (index < lines.length) {
       const rawLine = lines[index];
       const line = rawLine.replace(/\s+$/, '');
 
+      if (isFenceOpen(line)) {
+        closeList();
+        const openFence = line.trim();
+        index += 1;
+        const codeLines = [];
+        while (index < lines.length && !parseFenceClose(lines[index], openFence)) {
+          codeLines.push(lines[index]);
+          index += 1;
+        }
+        if (index < lines.length) index += 1;
+        parts.push(`<pre class="md-pre"><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`);
+        continue;
+      }
+
       if (isTableRow(line) && index + 1 < lines.length && isTableSeparator(lines[index + 1])) {
         closeList();
         const headerCells = parseTableRow(line);
+        const alignments = parseTableAlignments(lines[index + 1]);
         index += 2;
         const bodyRows = [];
         while (index < lines.length) {
@@ -181,7 +228,28 @@
           bodyRows.push(parseTableRow(bodyLine));
           index += 1;
         }
-        parts.push(renderTable(headerCells, bodyRows));
+        parts.push(renderTable(headerCells, bodyRows, alignments));
+        continue;
+      }
+
+      if (/^>\s?/.test(line)) {
+        closeList();
+        const quoteLines = [];
+        while (index < lines.length && /^>\s?/.test(lines[index].replace(/\s+$/, ''))) {
+          quoteLines.push(lines[index].replace(/\s+$/, '').replace(/^>\s?/, ''));
+          index += 1;
+        }
+        const quoteBody = quoteLines
+          .map((quoteLine) => (quoteLine.trim() ? `<p>${formatInlineMarkdown(quoteLine)}</p>` : ''))
+          .join('');
+        parts.push(`<blockquote class="md-quote">${quoteBody}</blockquote>`);
+        continue;
+      }
+
+      if (isHorizontalRule(line)) {
+        closeList();
+        parts.push('<hr class="md-hr">');
+        index += 1;
         continue;
       }
 
@@ -203,12 +271,23 @@
         index += 1;
         continue;
       }
-      if (/^[-*]\s+/.test(line)) {
-        if (!listOpen) {
-          parts.push('<ul>');
-          listOpen = true;
+      if (/^\d+\.\s+/.test(line)) {
+        if (listType !== 'ol') {
+          closeList();
+          parts.push('<ol>');
+          listType = 'ol';
         }
-        parts.push(`<li>${formatInlineMarkdown(line.replace(/^[-*]\s+/, ''))}</li>`);
+        parts.push(`<li>${formatInlineMarkdown(line.replace(/^\d+\.\s+/, ''))}</li>`);
+        index += 1;
+        continue;
+      }
+      if (/^[-*+]\s+/.test(line)) {
+        if (listType !== 'ul') {
+          closeList();
+          parts.push('<ul>');
+          listType = 'ul';
+        }
+        parts.push(`<li>${formatInlineMarkdown(line.replace(/^[-*+]\s+/, ''))}</li>`);
         index += 1;
         continue;
       }

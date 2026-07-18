@@ -1,0 +1,10 @@
+#!/bin/sh
+# Rewrite Cursor-authored commits to the project owner identity.
+AUTHOR=$(git log -1 --format='%an %ae')
+case "$AUTHOR" in
+  *[Cc]ursor*|*cursoragent*)
+    git commit --amend --author="Amadeus <tong.xue@vigekoo.com>" --no-edit --no-verify
+    ;;
+esac
+
+exit 0

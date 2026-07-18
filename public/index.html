@@ -22,10 +22,18 @@
     h1,h2,h3{margin:0 0 12px}.toolbar{display:flex;gap:10px;align-items:center}.toolbar>*{width:auto}
     .projects-layout{display:grid;grid-template-columns:1fr 330px;gap:18px}.project-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
     .project-card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;display:block;color:inherit;text-decoration:none}
-    .project-card:hover{border-color:var(--accent)}.project-card .path{font-size:12px;color:var(--muted);word-break:break-all;min-height:34px}
+    .project-card:hover{border-color:var(--accent)}.project-card .path{font-size:12px;color:var(--muted);word-break:break-all;min-height:34px;white-space:pre-line}
+    .workdir-list{display:flex;flex-direction:column;gap:8px;margin-top:4px}
+    .workdir-row{display:grid;grid-template-columns:88px minmax(0,1fr) auto;gap:8px;align-items:center}
+    .workdir-row input{margin:0}
+    .workdir-row button{width:auto;padding:7px 10px;font-size:12px}
+    .workdirs-section{border:1px solid var(--border);border-radius:8px;margin-top:16px;background:var(--panel2);overflow:hidden}
+    .workdirs-section summary{cursor:pointer;font-weight:600;padding:9px 11px;font-size:13px;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:8px}
+    .workdirs-section summary::-webkit-details-marker{display:none}
+    .workdirs-section .body{padding:0 10px 10px}
     .stats{display:flex;gap:12px;margin-top:14px;font-size:12px}.stats b{font-size:17px;display:block}
     .project-layout{display:grid;grid-template-columns:360px minmax(0,1fr);gap:14px;align-items:start}
-    .board{display:grid;grid-template-columns:repeat(8,minmax(120px,1fr));gap:9px;overflow-x:auto}
+    .board{display:grid;grid-template-columns:repeat(9,minmax(120px,1fr));gap:9px;overflow-x:auto}
     .column{background:var(--panel2);border:1px solid var(--border);border-radius:10px;min-height:480px;padding:9px}
     .column h3{font-size:12px;color:var(--muted);display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap}
     .column-actions{display:flex;gap:4px;flex-wrap:wrap}
@@ -134,7 +142,9 @@
       <aside class="panel">
         <h2>添加项目</h2>
         <label>项目名称</label><input id="projectName" placeholder="例如：订单服务" />
-        <label>固定工作目录</label><input id="projectWorkdir" placeholder="D:\code\order-service" />
+        <label>工作目录</label>
+        <div id="projectWorkdirs" class="workdir-list"></div>
+        <button type="button" id="addProjectWorkdirBtn" style="width:100%;margin-top:8px">添加目录</button>
         <label>部署命令 <span class="muted">(可选)</span></label><input id="projectDeployCommand" placeholder="例如：npm run deploy" />
         <button id="createProjectBtn" class="primary" style="width:100%;margin-top:14px">创建项目</button>
         <div id="projectError" class="error"></div>
@@ -153,6 +163,7 @@
           <input id="titleInput" placeholder="复杂任务建议填写标题" />
         </div>
         <div id="workdirGroup"><label>工作目录</label><input id="workdirInput" placeholder="本机任务必须指定目录" /></div>
+        <div id="taskWorkdirGroup" class="hidden"><label>工作目录</label><select id="taskWorkdirSelect"></select></div>
         <div id="variableFields" class="variable-fields"></div>
         <details id="templateSection" class="template-section">
           <summary>任务类型 · <span id="templateSummary" class="muted">通用</span></summary>
@@ -170,6 +181,15 @@
         <label>执行模型</label><select id="modelSelect"></select>
         <button id="createTaskBtn" class="primary" style="width:100%;margin-top:14px">提交到项目队列</button>
         <div id="taskError" class="error"></div>
+        <details id="workdirsSection" class="workdirs-section hidden">
+          <summary>工作目录 <span id="workdirsCount" class="badge">0</span></summary>
+          <div class="body">
+            <div id="projectWorkdirsEditor" class="workdir-list"></div>
+            <button type="button" id="addProjectWorkdirEditorBtn" style="width:100%;margin-top:8px">添加目录</button>
+            <button type="button" id="saveWorkdirsBtn" class="primary" style="width:100%;margin-top:10px">保存目录</button>
+            <div id="workdirsError" class="error"></div>
+          </div>
+        </details>
         <div id="rulesPanel" style="margin-top:20px"><h3>Cursor Rules</h3><div class="muted">加载中...</div></div>
       </aside>
 
@@ -196,6 +216,7 @@
           <div class="column" data-group="developing"><h3>开发中 <span class="count"></span></h3><div class="cards"></div></div>
           <div class="column" data-group="testing"><h3>测试中 <span class="count"></span></h3><div class="cards"></div></div>
           <div class="column" data-group="running"><h3>执行中 <span class="count"></span></h3><div class="cards"></div></div>
+          <div class="column" data-group="deploy"><h3>待部署 <span class="count"></span></h3><div class="cards"></div></div>
           <div class="column" data-group="done"><h3><span>已完成 <span class="count"></span></span><span class="column-actions"></span></h3><div class="cards"></div><div class="column-footer"></div></div>
           <div class="column" data-group="problem"><h3>异常 <span class="count"></span></h3><div class="cards"></div></div>
         </div>
@@ -649,12 +670,79 @@
       box.innerHTML=hasSummary?markdown(summary):escapeHtml(summary);
     }
 
+    function formatProjectWorkdirs(project){
+      const workdirs=project?.workdirs||[];
+      if(!workdirs.length)return project?.workdir||'每次任务指定本地目录';
+      return workdirs.map(entry=>entry.label?`${entry.label}: ${entry.path}`:entry.path).join('\n');
+    }
+
+    function workdirOptionLabel(entry){
+      return entry.label?`${entry.label} · ${entry.path}`:entry.path;
+    }
+
+    function renderWorkdirRows(container,workdirs,{allowRemove=true}={}){
+      if(!container)return;
+      const rows=workdirs.length?workdirs:[{label:'',path:''}];
+      container.innerHTML=rows.map((entry,index)=>`
+        <div class="workdir-row" data-index="${index}">
+          <input data-field="label" placeholder="标签" value="${escapeHtml(entry.label||'')}" />
+          <input data-field="path" placeholder="D:\\code\\service" value="${escapeHtml(entry.path||'')}" />
+          ${allowRemove?`<button type="button" data-remove="${index}" ${rows.length<=1?'disabled':''}>删除</button>`:''}
+        </div>`).join('');
+    }
+
+    function collectWorkdirRows(container){
+      if(!container)return [];
+      return Array.from(container.querySelectorAll('.workdir-row')).map(row=>({
+        label:row.querySelector('[data-field="label"]')?.value.trim()||'',
+        path:row.querySelector('[data-field="path"]')?.value.trim()||'',
+      })).filter(entry=>entry.path);
+    }
+
+    function bindWorkdirList(container,workdirs,onChange){
+      renderWorkdirRows(container,workdirs);
+      container.onclick=(event)=>{
+        const removeIndex=event.target.dataset.remove;
+        if(removeIndex!==undefined){
+          const next=collectWorkdirRows(container);
+          next.splice(Number(removeIndex),1);
+          bindWorkdirList(container,next.length?next:[{label:'',path:''}],onChange);
+          onChange?.();
+          return;
+        }
+      };
+      container.oninput=()=>onChange?.();
+    }
+
+    function renderCreateProjectWorkdirs(){
+      bindWorkdirList($('projectWorkdirs'),[{label:'',path:''}]);
+    }
+
+    function renderProjectWorkdirsEditor(){
+      const machine=state.project?.type==='machine';
+      $('workdirsSection').classList.toggle('hidden',machine);
+      if(machine)return;
+      const workdirs=state.project?.workdirs?.length?state.project.workdirs:[{label:'',path:''}];
+      $('workdirsCount').textContent=String(state.project?.workdirs?.length||0);
+      bindWorkdirList($('projectWorkdirsEditor'),workdirs);
+    }
+
+    function renderTaskWorkdirOptions(){
+      const machine=state.project?.type==='machine';
+      const workdirs=state.project?.workdirs||[];
+      $('workdirGroup').classList.toggle('hidden',!machine);
+      $('taskWorkdirGroup').classList.toggle('hidden',machine||workdirs.length<=1);
+      if(machine||workdirs.length<=1)return;
+      $('taskWorkdirSelect').innerHTML=workdirs.map(entry=>`
+        <option value="${escapeHtml(entry.path)}">${escapeHtml(workdirOptionLabel(entry))}</option>`).join('');
+    }
+
     async function loadHome(){
       state.projects=await api('/api/projects');
       $('projectGrid').innerHTML=state.projects.map(project=>`
         <a class="project-card" href="/?project=${encodeURIComponent(project.id)}" target="_blank">
           <h2>${escapeHtml(project.name)} ${project.type==='machine'?'<span class="badge">系统</span>':''}</h2>
-          <div class="path">${escapeHtml(project.workdir||'每次任务指定本地目录')}</div>
+          <div class="path">${escapeHtml(formatProjectWorkdirs(project))}</div>
           <div class="stats">
             <span><b>${project.counts.pending||0}</b>待执行</span>
             <span><b>${(project.counts.developing||0)+(project.counts.running||0)+(project.counts.planning||0)}</b>运行中</span>
@@ -670,10 +758,12 @@
       try{
         await api('/api/projects',{method:'POST',body:JSON.stringify({
           name:$('projectName').value.trim(),
-          workdir:$('projectWorkdir').value.trim(),
+          workdirs:collectWorkdirRows($('projectWorkdirs')),
           deployCommand:$('projectDeployCommand').value.trim()
         })});
-        $('projectName').value='';$('projectWorkdir').value='';$('projectDeployCommand').value='';await loadHome();
+        $('projectName').value='';$('projectDeployCommand').value='';
+        renderCreateProjectWorkdirs();
+        await loadHome();
       }catch(error){$('projectError').textContent=error.message}
     }
 
@@ -707,8 +797,9 @@
       state.rules=await api(`/api/projects/${state.projectId}/rules`);
       $('pageTitle').textContent=state.project.name;
       $('projectHeading').textContent=state.project.name;
-      $('projectPath').textContent=state.project.workdir||'本机动态目录';
-      $('workdirGroup').classList.toggle('hidden',state.project.type!=='machine');
+      $('projectPath').textContent=formatProjectWorkdirs(state.project);
+      renderTaskWorkdirOptions();
+      renderProjectWorkdirsEditor();
       renderProjectDeploy();
       renderTemplateOptions();
       renderTemplateFields();
@@ -782,20 +873,39 @@
         (state.project.type==='machine'?'<p class="muted">本机项目不绑定仓库 Rules。</p>':
         state.rules.length?state.rules.map(rule=>`
           <details class="rule"><summary>${escapeHtml(rule.name)}</summary>
-            <div class="meta">${escapeHtml(rule.relativePath)}</div>
+            <div class="meta">${escapeHtml(rule.relativePath)}${rule.workdirLabel?` · ${escapeHtml(rule.workdirLabel)}`:''}</div>
             <div class="markdown">${markdown(rule.content)}</div>
           </details>`).join(''):'<p class="muted">未发现 .cursor/rules/*.mdc</p>')+
         `</details>`;
     }
 
+    async function saveProjectWorkdirs(){
+      $('workdirsError').textContent='';
+      try{
+        state.project=await api(`/api/projects/${state.projectId}/workdirs`,{
+          method:'PATCH',
+          body:JSON.stringify({workdirs:collectWorkdirRows($('projectWorkdirsEditor'))})
+        });
+        state.rules=await api(`/api/projects/${state.projectId}/rules`);
+        $('projectPath').textContent=formatProjectWorkdirs(state.project);
+        renderProjectWorkdirsEditor();
+        renderTaskWorkdirOptions();
+        renderRules();
+      }catch(error){$('workdirsError').textContent=error.message}
+    }
+
     async function createTask(){
       $('taskError').textContent='';
       try{
+        const workdirs=state.project?.workdirs||[];
+        const taskWorkdir=state.project.type==='machine'
+          ?$('workdirInput').value.trim()
+          :(workdirs.length>1?$('taskWorkdirSelect').value:null);
         await api('/api/tasks',{method:'POST',body:JSON.stringify({
           projectId:state.projectId,
           title:$('complexInput').checked&&!$('pipelineInput').checked?$('titleInput').value.trim():'',
           template:$('templateSelect').value,
-          workdir:state.project.type==='machine'?$('workdirInput').value.trim():null,
+          workdir:taskWorkdir,
           isComplex:$('complexInput').checked&&!$('pipelineInput').checked,
           pipelineMode:$('pipelineInput').checked||Boolean(selectedTemplate()?.pipeline||selectedTemplate()?.category==='开发'),
           modelId:$('modelSelect').value||null,
@@ -982,11 +1092,25 @@
         $('iterateModal').onclick=(event)=>{
           if(event.target===$('iterateModal'))closeIterateModal();
         };
+        $('addProjectWorkdirEditorBtn').onclick=()=>{
+          bindWorkdirList(
+            $('projectWorkdirsEditor'),
+            [...collectWorkdirRows($('projectWorkdirsEditor')),{label:'',path:''}],
+          );
+        };
+        $('saveWorkdirsBtn').onclick=saveProjectWorkdirs;
         $('complexInput').onchange=()=>{if($('complexInput').checked)$('pipelineInput').checked=false;renderModelOptions();updateTitlePreview();};
         $('pipelineInput').onchange=()=>{if($('pipelineInput').checked){$('complexInput').checked=false;$('complexInput').disabled=true}else{$('complexInput').disabled=false}renderModelOptions();updateTitlePreview();};
         $('templateSelect').onchange=()=>{syncTemplateSelection();renderTemplateFields();updateTitlePreview();};
         await loadProject();
       }else{
+        renderCreateProjectWorkdirs();
+        $('addProjectWorkdirBtn').onclick=()=>{
+          bindWorkdirList(
+            $('projectWorkdirs'),
+            [...collectWorkdirRows($('projectWorkdirs')),{label:'',path:''}],
+          );
+        };
         $('createProjectBtn').onclick=createProject;await loadHome();
       }
     }

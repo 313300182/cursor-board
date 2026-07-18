@@ -5,7 +5,7 @@ const path = require('node:path');
 const test = require('node:test');
 const Database = require('better-sqlite3');
 
-const { ensureSchema, createProjectRepo, createTaskRepo } = require('../db');
+const { ensureSchema, createProjectRepo, createTaskRepo, normalizeWorkdirs } = require('../db');
 
 function createMemoryRepos() {
   const db = new Database(':memory:');
@@ -57,7 +57,47 @@ test('普通项目保存固定工作目录并可创建关联任务', () => {
   assert.equal(tasks.getTask('task-1').project_id, project.id);
   assert.equal(tasks.getTask('task-1').model_id, 'gpt-5.6-luna');
   assert.equal(tasks.listTasks(undefined, project.id).length, 1);
+  assert.deepEqual(project.workdirs, [{ label: '', path: 'D:\\code\\java-app' }]);
   db.close();
+});
+
+test('普通项目可保存多个工作目录并后续修改', () => {
+  const { db, projects } = createMemoryRepos();
+  const project = projects.createProject({
+    id: 'full-stack',
+    name: 'Full Stack',
+    type: 'normal',
+    workdirs: [
+      { label: '后端', path: 'D:\\code\\api' },
+      { label: '前端', path: 'D:\\code\\web' },
+    ],
+    created_at: new Date().toISOString(),
+  });
+
+  assert.equal(project.workdir, 'D:\\code\\api');
+  assert.deepEqual(project.workdirs, [
+    { label: '后端', path: 'D:\\code\\api' },
+    { label: '前端', path: 'D:\\code\\web' },
+  ]);
+
+  const updated = projects.updateProjectWorkdirs(project.id, [
+    { label: '网关', path: 'D:\\code\\gateway' },
+    { label: '后端', path: 'D:\\code\\api' },
+  ]);
+  assert.equal(updated.workdir, 'D:\\code\\gateway');
+  assert.deepEqual(updated.workdirs, [
+    { label: '网关', path: 'D:\\code\\gateway' },
+    { label: '后端', path: 'D:\\code\\api' },
+  ]);
+  db.close();
+});
+
+test('normalizeWorkdirs 会去重并忽略空路径', () => {
+  assert.deepEqual(normalizeWorkdirs([
+    { label: '后端', path: 'D:/code/api' },
+    { label: '重复', path: 'D:\\code\\api' },
+    { label: '空', path: '  ' },
+  ]), [{ label: '后端', path: 'D:/code/api' }]);
 });
 
 test('已完成任务可归档且默认列表不再返回', () => {
@@ -121,7 +161,7 @@ test('规则扫描递归读取 .cursor/rules 下的 mdc 文件', async () => {
     'utf8',
   );
 
-  const { scanProjectRules } = require('../project-rules');
+  const { scanProjectRules, scanProjectRulesForWorkdirs } = require('../project-rules');
   const rules = await scanProjectRules(root);
 
   assert.equal(rules.length, 1);
@@ -129,4 +169,27 @@ test('规则扫描递归读取 .cursor/rules 下的 mdc 文件', async () => {
   assert.equal(rules[0].metadata.description, 'Java style');
   assert.equal(rules[0].content, '# Java 规范\n只使用 Java 8。');
   fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('多目录项目会合并各目录下的 Cursor Rules', async () => {
+  const { scanProjectRulesForWorkdirs } = require('../project-rules');
+  const backendRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cursor-board-backend-'));
+  const frontendRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cursor-board-frontend-'));
+  const backendRules = path.join(backendRoot, '.cursor', 'rules');
+  const frontendRules = path.join(frontendRoot, '.cursor', 'rules');
+  fs.mkdirSync(backendRules, { recursive: true });
+  fs.mkdirSync(frontendRules, { recursive: true });
+  fs.writeFileSync(path.join(backendRules, 'api.mdc'), '---\n---\n# API', 'utf8');
+  fs.writeFileSync(path.join(frontendRules, 'ui.mdc'), '---\n---\n# UI', 'utf8');
+
+  const rules = await scanProjectRulesForWorkdirs([
+    { label: '后端', path: backendRoot },
+    { label: '前端', path: frontendRoot },
+  ]);
+
+  assert.equal(rules.length, 2);
+  assert.ok(rules.some((rule) => rule.name === 'api.mdc' && rule.workdirLabel === '后端'));
+  assert.ok(rules.some((rule) => rule.name === 'ui.mdc' && rule.workdirLabel === '前端'));
+  fs.rmSync(backendRoot, { recursive: true, force: true });
+  fs.rmSync(frontendRoot, { recursive: true, force: true });
 });

@@ -69,10 +69,31 @@ class TaskQueue {
     });
   }
 
+  resolveTaskWorkdir(project, inputWorkdir) {
+    if (project.type === 'machine') {
+      return String(inputWorkdir || '').trim() || null;
+    }
+    const workdirs = project.workdirs || [];
+    if (!workdirs.length) {
+      return project.workdir || null;
+    }
+    if (workdirs.length === 1) {
+      return workdirs[0].path;
+    }
+    const selected = String(inputWorkdir || '').trim();
+    if (!selected) throw new Error('请选择工作目录');
+    const match = workdirs.find(
+      (entry) => entry.path.replace(/\//g, '\\').toLowerCase()
+        === selected.replace(/\//g, '\\').toLowerCase(),
+    );
+    if (!match) throw new Error('所选工作目录不属于当前项目');
+    return match.path;
+  }
+
   createTask(input) {
     const project = this.projects.getProject(input.projectId);
     if (!project) throw new Error('项目不存在');
-    const workdir = project.type === 'machine' ? input.workdir : project.workdir;
+    const workdir = this.resolveTaskWorkdir(project, input.workdir);
     if (!workdir) {
       throw new Error(project.type === 'machine' ? '本机任务必须设置工作目录' : '项目未配置工作目录');
     }

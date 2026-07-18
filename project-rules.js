@@ -64,7 +64,27 @@ async function scanProjectRules(workdir) {
   return rules;
 }
 
+async function scanProjectRulesForWorkdirs(workdirs) {
+  const all = [];
+  for (const entry of workdirs || []) {
+    const rules = await scanProjectRules(entry.path);
+    const prefix = entry.label || path.basename(entry.path);
+    for (const rule of rules) {
+      all.push({
+        ...rule,
+        workdir: entry.path,
+        workdirLabel: entry.label || entry.path,
+        relativePath: prefix
+          ? path.join(prefix, rule.relativePath)
+          : rule.relativePath,
+      });
+    }
+  }
+  return all;
+}
+
 module.exports = {
   parseFrontmatter,
   scanProjectRules,
+  scanProjectRulesForWorkdirs,
 };

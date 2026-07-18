@@ -2,9 +2,9 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const express = require('express');
-const { openDb, createProjectRepo, createTaskRepo, ensureDataDir, DATA_DIR } = require('./db');
+const { openDb, createProjectRepo, createTaskRepo, ensureDataDir, DATA_DIR, normalizeWorkdirs } = require('./db');
 const { loadTemplates } = require('./templates');
-const { scanProjectRules } = require('./project-rules');
+const { scanProjectRulesForWorkdirs } = require('./project-rules');
 const TaskQueue = require('./queue');
 const { getModelSettings } = require('./model-config');
 const { writePidFile, clearPidFile } = require('./deploy-restart');
@@ -27,6 +27,29 @@ function loadOrCreateToken() {
   const token = crypto.randomBytes(32).toString('hex');
   fs.writeFileSync(TOKEN_PATH, token, { encoding: 'utf8', mode: 0o600 });
   return token;
+}
+
+function validateProjectWorkdirs(workdirs, queue) {
+  const normalized = normalizeWorkdirs(workdirs);
+  if (!normalized.length) throw new Error('至少需要一个工作目录');
+  for (const entry of normalized) {
+    if (!queue.isWorkdirAllowed(entry.path)) {
+      throw new Error(`工作目录不在白名单内: ${entry.path}`);
+    }
+    if (!fs.existsSync(entry.path) || !fs.statSync(entry.path).isDirectory()) {
+      throw new Error(`工作目录不存在或不是文件夹: ${entry.path}`);
+    }
+  }
+  return normalized;
+}
+
+function parseCreateProjectWorkdirs(body) {
+  if (Array.isArray(body.workdirs) && body.workdirs.length) {
+    return body.workdirs;
+  }
+  const workdir = String(body.workdir || '').trim();
+  if (workdir) return [{ path: workdir }];
+  return [];
 }
 
 function createBroadcaster() {
@@ -138,19 +161,14 @@ function main() {
   app.post('/api/projects', (req, res) => {
     try {
       const name = String(req.body.name || '').trim();
-      const workdir = String(req.body.workdir || '').trim();
       const deployCommand = String(req.body.deployCommand || '').trim();
+      const workdirs = validateProjectWorkdirs(parseCreateProjectWorkdirs(req.body), queue);
       if (!name) throw new Error('项目名称不能为空');
-      if (!workdir) throw new Error('项目工作目录不能为空');
-      if (!queue.isWorkdirAllowed(workdir)) throw new Error(`工作目录不在白名单内: ${workdir}`);
-      if (!fs.existsSync(workdir) || !fs.statSync(workdir).isDirectory()) {
-        throw new Error(`工作目录不存在或不是文件夹: ${workdir}`);
-      }
       const project = projects.createProject({
         id: crypto.randomUUID(),
         name,
         type: 'normal',
-        workdir,
+        workdirs,
         deploy_command: deployCommand || null,
         created_at: new Date().toISOString(),
       });
@@ -165,6 +183,17 @@ function main() {
     const project = projects.getProject(req.params.id);
     if (!project) return res.status(404).json({ error: '项目不存在' });
     res.json({ ...project, counts: repo.countByProject(project.id) });
+  });
+
+  app.patch('/api/projects/:id/workdirs', (req, res) => {
+    try {
+      const workdirs = validateProjectWorkdirs(req.body.workdirs, queue);
+      const project = projects.updateProjectWorkdirs(req.params.id, workdirs);
+      broadcaster.send('project:updated', project);
+      res.json({ ...project, counts: repo.countByProject(project.id) });
+    } catch (err) {
+      res.status(400).json({ error: String(err.message || err) });
+    }
   });
 
   app.patch('/api/projects/:id/deploy-command', (req, res) => {
@@ -214,7 +243,7 @@ function main() {
     try {
       const project = projects.getProject(req.params.id);
       if (!project) return res.status(404).json({ error: '项目不存在' });
-      res.json(await scanProjectRules(project.workdir));
+      res.json(await scanProjectRulesForWorkdirs(project.workdirs));
     } catch (err) {
       res.status(500).json({ error: String(err.message || err) });
     }

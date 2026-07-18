@@ -81,9 +81,64 @@ function ensureSchema(db) {
   ensureColumn(db, 'projects', 'deploy_error', 'TEXT');
   ensureColumn(db, 'projects', 'deploy_started_at', 'TEXT');
   ensureColumn(db, 'projects', 'deploy_finished_at', 'TEXT');
+  ensureColumn(db, 'projects', 'workdirs_json', 'TEXT');
+  db.exec(`
+    UPDATE projects
+    SET workdirs_json = json_array(json_object('path', workdir))
+    WHERE workdirs_json IS NULL
+      AND workdir IS NOT NULL
+      AND trim(workdir) != ''
+  `);
   db.exec("UPDATE tasks SET deploy_completed = 1 WHERE status = 'done' AND deploy_completed = 0");
   db.exec('CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_tasks_archived ON tasks(archived)');
+}
+
+function normalizeWorkdirEntry(entry) {
+  if (typeof entry === 'string') {
+    const dir = entry.trim();
+    return dir ? { label: '', path: dir } : null;
+  }
+  if (entry && typeof entry === 'object') {
+    const dir = String(entry.path || '').trim();
+    if (!dir) return null;
+    return {
+      label: String(entry.label || '').trim(),
+      path: dir,
+    };
+  }
+  return null;
+}
+
+function normalizeWorkdirs(workdirs) {
+  if (!Array.isArray(workdirs)) return [];
+  const seen = new Set();
+  const result = [];
+  for (const entry of workdirs) {
+    const normalized = normalizeWorkdirEntry(entry);
+    if (!normalized) continue;
+    const key = normalized.path.replace(/\//g, '\\').toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(normalized);
+  }
+  return result;
+}
+
+function parseProjectWorkdirs(row) {
+  if (!row) return [];
+  if (row.workdirs_json) {
+    try {
+      const parsed = normalizeWorkdirs(JSON.parse(row.workdirs_json));
+      if (parsed.length) return parsed;
+    } catch (_) {
+      // ignore invalid json and fall back to legacy workdir
+    }
+  }
+  if (row.workdir) {
+    return [{ label: '', path: row.workdir }];
+  }
+  return [];
 }
 
 function openDb() {
@@ -113,7 +168,13 @@ function mapTask(row) {
 }
 
 function mapProject(row) {
-  return row || null;
+  if (!row) return null;
+  const workdirs = parseProjectWorkdirs(row);
+  return {
+    ...row,
+    workdirs,
+    workdir: workdirs[0]?.path || row.workdir || null,
+  };
 }
 
 function createProjectRepo(db) {
@@ -130,17 +191,23 @@ function createProjectRepo(db) {
     },
 
     createProject(project) {
+      const workdirs = normalizeWorkdirs(
+        project.workdirs || (project.workdir ? [{ path: project.workdir }] : []),
+      );
+      const workdirsJson = workdirs.length ? JSON.stringify(workdirs) : null;
+      const primaryWorkdir = workdirs[0]?.path || project.workdir || null;
       db.prepare(`
         INSERT INTO projects (
-          id, name, type, workdir, deploy_command, is_system, created_at
+          id, name, type, workdir, workdirs_json, deploy_command, is_system, created_at
         ) VALUES (
-          @id, @name, @type, @workdir, @deploy_command, @is_system, @created_at
+          @id, @name, @type, @workdir, @workdirs_json, @deploy_command, @is_system, @created_at
         )
       `).run({
         id: project.id,
         name: project.name,
         type: project.type || 'normal',
-        workdir: project.workdir || null,
+        workdir: primaryWorkdir,
+        workdirs_json: workdirsJson,
         deploy_command: project.type === 'machine' ? null : (project.deploy_command || null),
         is_system: project.is_system || 0,
         created_at: project.created_at,
@@ -154,6 +221,17 @@ function createProjectRepo(db) {
 
     listProjects() {
       return db.prepare('SELECT * FROM projects ORDER BY is_system DESC, created_at ASC').all();
+    },
+
+    updateProjectWorkdirs(id, workdirs) {
+      const project = this.getProject(id);
+      if (!project) throw new Error('项目不存在');
+      if (project.type === 'machine') throw new Error('本机项目不支持修改目录');
+      const normalized = normalizeWorkdirs(workdirs);
+      if (!normalized.length) throw new Error('至少需要一个工作目录');
+      db.prepare('UPDATE projects SET workdirs_json = ?, workdir = ? WHERE id = ?')
+        .run(JSON.stringify(normalized), normalized[0].path, id);
+      return this.getProject(id);
     },
 
     updateDeployCommand(id, deployCommand) {
@@ -450,4 +528,6 @@ module.exports = {
   openDb,
   createProjectRepo,
   createTaskRepo,
+  normalizeWorkdirs,
+  parseProjectWorkdirs,
 };

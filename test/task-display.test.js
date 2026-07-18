@@ -30,7 +30,9 @@ function task(id, patch = {}) {
 
 test('statusGroup 映射流水线阶段到看板列', () => {
   assert.equal(statusGroup('developing'), 'developing');
+  assert.equal(statusGroup('testing'), 'testing');
   assert.equal(statusGroup('pending_deploy'), 'deploy');
+  assert.equal(statusGroup('deploying'), 'deploy');
   assert.equal(statusGroup('awaiting_input'), 'waiting');
   assert.equal(statusGroup('failed'), 'problem');
 });

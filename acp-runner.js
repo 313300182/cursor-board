@@ -80,7 +80,6 @@ class AcpRunner {
         assertAgentResultSucceeded(summary);
         return {
           permissionEvents: session.permissionEvents,
-          sessionId,
         };
       },
     });
@@ -134,7 +133,6 @@ class AcpRunner {
           permissionEvents: session.permissionEvents,
           awaitingDeploy: true,
           resultSummary: session.getSummary(),
-          sessionId,
         };
       },
     });

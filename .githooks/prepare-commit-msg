@@ -1,0 +1,11 @@
+#!/bin/sh
+# Ensure commits in this repo do not keep Cursor attribution trailers.
+MSG_FILE="$1"
+[ -f "$MSG_FILE" ] || exit 0
+
+grep -vi \
+  -e '^Made-with: Cursor' \
+  -e '^Co-authored-by:.*[Cc]ursor' \
+  "$MSG_FILE" > "$MSG_FILE.tmp" && mv "$MSG_FILE.tmp" "$MSG_FILE"
+
+exit 0

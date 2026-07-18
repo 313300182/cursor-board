@@ -8,10 +8,12 @@ const html = fs.readFileSync(
   'utf8',
 );
 
-test('项目页使用部署按钮且不再展示部署列', () => {
+test('项目页使用部署按钮并展示待部署看板列', () => {
   assert.match(html, /id="deployProjectBtn"/);
   assert.match(html, /id="deployCommandInput"/);
-  assert.doesNotMatch(html, /data-group="deploy"/);
+  assert.match(html, /data-group="deploy"/);
+  assert.match(html, /待部署/);
+  assert.match(html, /grid-template-columns:repeat\(9,/);
 });
 
 test('本机项目会隐藏项目部署区域', () => {

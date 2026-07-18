@@ -3,7 +3,31 @@ const test = require('node:test');
 
 const TaskQueue = require('../queue');
 
-function createQueue() {
+test('多目录项目创建任务时必须选择所属目录', () => {
+  const { queue, getCreatedTask } = createQueue({
+    workdirs: [
+      { label: '后端', path: process.cwd() },
+      { label: '前端', path: process.cwd() },
+    ],
+  });
+
+  queue.createTask({
+    projectId: 'board',
+    template: 'general',
+    workdir: process.cwd(),
+    variables: { description: '后端改动' },
+  });
+
+  assert.equal(getCreatedTask().workdir, process.cwd());
+
+  assert.throws(() => queue.createTask({
+    projectId: 'board',
+    template: 'general',
+    variables: { description: '缺少目录' },
+  }), /请选择工作目录/);
+});
+
+function createQueue(projectOverrides = {}) {
   let createdTask;
   const repo = {
     createTask(task) {
@@ -21,6 +45,7 @@ function createQueue() {
         id: 'board',
         type: 'normal',
         workdir: process.cwd(),
+        workdirs: projectOverrides.workdirs || [{ label: '', path: process.cwd() }],
       };
     },
   };

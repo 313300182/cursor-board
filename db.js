@@ -444,7 +444,6 @@ function createTaskRepo(db) {
         SET archived = 1,
             archived_at = @now
         WHERE id = @id
-          AND status = 'done'
           AND archived = 0
           AND project_id = @project_id
       `);

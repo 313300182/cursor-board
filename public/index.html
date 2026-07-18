@@ -1094,7 +1094,7 @@
         ${task.error_message?`<div class="error">${escapeHtml(task.error_message)}</div>`:''}
         ${['failed','needs_human'].includes(task.status)?'<button id="retryBtn">重新入队</button>':''}
         ${task.status==='done'?'<button id="iterateBtn">迭代任务</button>':''}
-        ${task.status==='done'&&!task.archived?'<button id="archiveBtn">归档</button>':''}`;
+        ${!task.archived?'<button id="archiveBtn">归档</button>':''}`;
       renderSummary(task);
       renderLiveLog(state.logChunks[task.id]||[]);
       const retry=$('retryBtn');

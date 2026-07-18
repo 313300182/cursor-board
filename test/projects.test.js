@@ -156,7 +156,7 @@ test('任务可标记需要 Git 提交', () => {
   db.close();
 });
 
-test('已完成任务可归档且默认列表不再返回', () => {
+test('任意状态任务可归档且默认列表不再返回', () => {
   const { db, projects, tasks } = createMemoryRepos();
   const project = projects.createProject({
     id: 'archive-app',
@@ -202,8 +202,11 @@ test('已完成任务可归档且默认列表不再返回', () => {
   assert.equal(tasks.countArchivedByProject(project.id), 1);
   assert.equal(tasks.countByProject(project.id).done, undefined);
 
-  const skipped = tasks.archiveTasks(['pending-1'], project.id);
-  assert.equal(skipped.length, 0);
+  const pendingArchived = tasks.archiveTasks(['pending-1'], project.id);
+  assert.equal(pendingArchived.length, 1);
+  assert.equal(pendingArchived[0].archived, true);
+  assert.equal(tasks.listTasks(undefined, project.id).length, 0);
+  assert.equal(tasks.countArchivedByProject(project.id), 2);
   db.close();
 });
 

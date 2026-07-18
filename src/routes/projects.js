@@ -65,7 +65,11 @@ function createProjectsRouter(deps) {
   router.get('/:id', asyncHandler(async (req, res) => {
     const project = projects.getProject(req.params.id);
     if (!project) throw new HttpError(404, '项目不存在');
-    res.json({ ...project, counts: repo.countByProject(project.id) });
+    res.json({
+      ...project,
+      counts: repo.countByProject(project.id),
+      archivedCount: repo.countArchivedByProject(project.id),
+    });
   }));
 
   router.patch('/:id/workdirs', asyncHandler(async (req, res) => {

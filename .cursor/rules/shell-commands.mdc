@@ -1,0 +1,57 @@
+---
+description: Windows/PowerShell 命令执行与 Git 调用规范
+alwaysApply: true
+---
+
+# 命令执行规范（Windows / PowerShell）
+
+本项目在 Windows + PowerShell 环境运行，命令行有固定坑，遵守以下约定可避免乱码、语法错误与浏览器/终端连带崩溃。
+
+## 命令拼接
+
+- ❌ 不要用 `&&` / `||` 串联命令（Windows PowerShell 5.1 不支持 `&&`）。
+- ✅ 用 `;` 分隔，或拆成多条独立命令分别执行。
+- ❌ 不要把大量逻辑拼成一条超长单行命令（解析压力大、难排错、易触发资源峰值）。
+- ✅ 复杂流程写成多步，或落成脚本文件后调用。
+
+## 编码
+
+- 终端可能是 GBK 代码页，输出中文/框线符号（`─│└` 等）易乱码。
+- 需要稳定 UTF-8 时：优先用 `pwsh`（PowerShell 7），并在会话开头设置
+  `chcp 65001` + `[Console]::OutputEncoding=[Text.UTF8Encoding]::new()`。
+- 读写文件用专用文件工具，不要用 `cat`/`echo` 重定向拼接文件。
+
+## Git 调用（重要）
+
+- 代码里执行 git **一律走 `git-runner.js`（`spawn('git', args, { shell:false })`）**，不经过 shell。
+  - 好处：绕开 `&&`/引号转义/编码问题，参数以数组传递，输出结构化。
+- ❌ 不要在业务代码中用 `spawn(cmdString, { shell:true })` 拼 `git ...` 字符串。
+- 流水线提交阶段采用「看板确定性挑文件 + AI 只写提交信息」（G+D，见 `acp-runner.js` / `git-runner.js`）：
+  1. **抓基线（D）**：抢到目录锁、开始执行前，`captureBaselineDirty` 记录各目录「任务开始前就已存在的脏文件」。
+  2. **记编辑（G）**：`acp-runner` 在 `session/update` 里捕获 `kind:'edit'` 工具调用的 `locations[].path`，记为本任务编辑过的文件。
+  3. **定文件**：`collectTaskUnits` 确定性挑出本任务文件＝「执行期间新变脏的文件」∪「Agent 编辑过且仍有改动的文件」；任务开始前就脏、且本任务没编辑的文件视为存量噪声跳过。
+  4. **提交**：`commitSelectedUnits`（文件级单元）先 `git reset -q` 清索引，再 `git add -- <文件>`，最后 `git commit -m <AI 提交信息>`（可选 push）。
+  5. AI 只负责生成一行提交信息（`buildGitMessagePrompt` / `parseGitMessage`，格式 `[GIT:MSG]…[GIT:END]`），**不再把 hunk 全文塞进 prompt**，避免大 prompt。
+- 之所以能省掉「让 AI 挑 hunk」：全局目录互斥保证执行期间只有本任务在写这个目录，磁盘上的新增改动就是本任务的。
+- 不再让 Agent 在其 shell 里直接跑 `git status/diff/add/commit`。
+
+## 并发与工作目录（全局互斥）
+
+- 物理工作目录互斥统一由 **`workdir-lock.js`（`WorkdirLock`）** 管理，进程内全局共享一把锁：
+  - `queue.js` 创建这把锁，注入给 `scheduler.js` 和 `project-deployer.js`，保证「任务执行」与「项目部署」不会同时改写同一 git 工作树（含父子目录）。
+  - 只读的自由对话（`chat-service.js`，`mode:'ask'`）不写文件，**不纳入**这把锁。
+- 获取方式：
+  - 轮询者（调度器）用 `isBusy` + `tryAcquire`（同步、非阻塞）。
+  - 需要等待的写入者（部署、plan 执行阶段）用 `acquire`（异步阻塞，按 FIFO 授予）。
+  - 每个 owner **一次性**获取其全部目录，绝不「持一等一」，因此无死锁。
+- **plan 阶段不锁目录**：`is_complex`（plan）任务在规划期只读、不占目录锁；计划批准、进入执行（dev/执行 prompt）前才由 `acquireExecuteLock` 阻塞获取目录锁。若规划期间文件被别的任务改动，执行时由 AI 随机应变。
+- 新增任何会写工作目录的流程（新的 agent 入口、批处理等），务必先经这把锁 `acquire/release`，别绕过。
+
+## Git 提交（提交阶段串行的前提）
+
+- 上面的目录互斥是 hunk 级提交安全的前提：同一目录同一时刻只有一个写入者，提交时磁盘上不会混入别人的半成品改动。
+
+## 大输出防护
+
+- `git diff`、测试输出等可能极大，塞进日志/上下文会放大内存压力。
+- 采集大输出时先截断或摘要（保留头尾 + 省略中间），不要整块透传。

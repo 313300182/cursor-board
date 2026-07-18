@@ -11,10 +11,21 @@ const PHASE_STATUS = {
   pending_deploy: 'pending_deploy',
 };
 
+const MAX_ERROR_CHARS = 8000;
+
 /**
  * Dev → test → deploy pipeline helpers for single-session workflows.
  * @author Amadeus
  */
+function truncateMiddle(text, maxChars = MAX_ERROR_CHARS) {
+  const value = String(text || '');
+  if (value.length <= maxChars) return value;
+  const headChars = Math.floor(maxChars * 0.7);
+  const tailChars = maxChars - headChars;
+  const omitted = value.length - maxChars;
+  return `${value.slice(0, headChars)}\n…（已省略 ${omitted} 个字符）…\n${value.slice(-tailChars)}`;
+}
+
 function inferTestOutcomeFromOutput(text) {
   const body = String(text || '');
   const failFooter = body.match(/#\s*fail\s+(\d+)/i);
@@ -50,7 +61,7 @@ function parseTestResult(summary) {
   if (/\[TEST:FAIL\]/i.test(text)) {
     return {
       passed: false,
-      error: (failMatch ? failMatch[1] : text).trim() || '测试失败，未提供详细报错',
+      error: truncateMiddle((failMatch ? failMatch[1] : text).trim()) || '测试失败，未提供详细报错',
       reason: 'fail',
     };
   }
@@ -131,69 +142,48 @@ function buildFixPrompt(error) {
   ].join('\n');
 }
 
-function buildGitCommitPrompt({ taskTitle, workdirs, push = false } = {}) {
+const MAX_MESSAGE_FILES = 50;
+
+function buildGitMessagePrompt({ taskTitle, files = [], push = false } = {}) {
+  const list = (Array.isArray(files) ? files : []).filter(Boolean);
+  const shown = list.slice(0, MAX_MESSAGE_FILES);
+  const omitted = list.length - shown.length;
   const lines = [
-    '【流水线 · Git 提交阶段】',
-    '测试已通过，请提交本次任务产生的代码变更。',
+    '【流水线 · Git 提交阶段（生成提交信息）】',
+    '测试已通过。看板已根据「你本次编辑过的文件」自动挑好要提交的改动，git 提交由看板执行，',
+    '你无需运行 git status/diff/add/commit，也无需挑选文件。',
+    '',
+    '本次将提交以下文件：',
+    ...shown.map((file) => `- ${file}`),
   ];
-  if (taskTitle) {
-    lines.push(`任务标题：${taskTitle}`);
+  if (omitted > 0) {
+    lines.push(`- …（另有 ${omitted} 个文件）`);
   }
-  const dirs = Array.isArray(workdirs) ? workdirs.filter((entry) => entry?.path) : [];
-  if (dirs.length > 1) {
-    lines.push('', '本任务涉及多个工作目录，请分别在每个 Git 仓库中检查并提交：');
-    dirs.forEach((entry) => {
-      const label = String(entry.label || '').trim() || entry.path;
-      lines.push(`- ${label}：${entry.path}`);
-    });
-  } else if (dirs.length === 1) {
-    lines.push(`工作目录：${dirs[0].path}`);
+  if (taskTitle) {
+    lines.push('', `任务标题（供参考）：${taskTitle}`);
   }
   lines.push(
     '',
-    '要求：',
-    '- 先在各相关工作目录执行 git status，确认本次任务相关变更',
-    '- 若无任何可提交变更，在回复末尾单独一行输出 [GIT:SKIP]',
-    '- 若有变更：git add 相关文件并 git commit，提交信息应简洁说明本次任务改动',
-    '- **必须**在回复末尾单独一行输出结果标记：',
-    '  - 提交成功 → [GIT:COMMIT]，可附 commit hash 或摘要',
-    '  - 提交失败 → [GIT:FAIL]，并在其后附上完整报错',
-    '- 此阶段不要修改业务代码（除解决 git 冲突等提交问题外）',
-    '- 不要执行部署',
+    '请为本次提交写一条简洁准确的中文提交信息（单行，概括本次任务改动，不要换行、不要解释）。',
+    '严格按以下格式在回复末尾输出：',
+    '[GIT:MSG]',
+    '<一行提交信息>',
+    '[GIT:END]',
   );
   if (push) {
-    lines.push('- 提交成功后执行 git push（不要使用 --force）');
-  } else {
-    lines.push('- 不要 push，仅本地 commit');
+    lines.push('', '（提交成功后看板会自动执行 git push，不使用 --force）');
   }
   return lines.join('\n');
 }
 
-function parseGitCommitResult(summary) {
+function parseGitMessage(summary) {
   const text = String(summary || '');
-  if (/\[GIT:SKIP\]/i.test(text)) {
-    return { ok: true, committed: false, skipped: true, error: null, reason: 'skip' };
-  }
-  if (/\[GIT:COMMIT\]/i.test(text)) {
-    return { ok: true, committed: true, skipped: false, error: null, reason: 'commit' };
-  }
-  const failMatch = text.match(/\[GIT:FAIL\]([\s\S]*?)(?=\[GIT:|$)/i);
-  if (/\[GIT:FAIL\]/i.test(text)) {
-    return {
-      ok: false,
-      committed: false,
-      skipped: false,
-      error: (failMatch ? failMatch[1] : text).trim() || 'Git 提交失败，未提供详细报错',
-      reason: 'fail',
-    };
-  }
-  return {
-    ok: false,
-    committed: false,
-    skipped: false,
-    error: 'Git 提交阶段未输出 [GIT:COMMIT]、[GIT:SKIP] 或 [GIT:FAIL] 标记',
-    reason: 'missing_marker',
-  };
+  const block = text.match(/\[GIT:MSG\]([\s\S]*?)(?=\[GIT:END\]|$)/i);
+  const messageLines = block
+    ? block[1].split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+    : [];
+  const message = (messageLines[0] || '').replace(/^[-*]\s*/, '').trim();
+  return { message: message || null };
 }
 
 function buildDeployPrompt(deployCommand, { backlog = [], currentTitle = '' } = {}) {
@@ -330,14 +320,15 @@ module.exports = {
   MISSING_MARKER_ERROR,
   TASK_TITLE_MAX_LEN,
   PHASE_STATUS,
+  truncateMiddle,
   parseTestResult,
   parseTaskTitleMarker,
   inferTestOutcomeFromOutput,
   buildTestPrompt,
   buildMissingMarkerPrompt,
   buildFixPrompt,
-  buildGitCommitPrompt,
-  parseGitCommitResult,
+  buildGitMessagePrompt,
+  parseGitMessage,
   buildDeployPrompt,
   buildDeployRepairPrompt,
   buildTitlePromptSuffix,

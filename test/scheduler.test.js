@@ -53,3 +53,76 @@ test('同一项目任务串行，不同项目最多并行三个', async () => {
 
   for (const gate of gates.values()) gate.resolve();
 });
+
+test('不同项目指向同一物理目录时串行执行', async () => {
+  const started = [];
+  const gates = new Map();
+  const pending = [
+    { id: 'x1', project_id: 'x', workdirs: [{ path: 'D:\\repo\\app' }] },
+    { id: 'y1', project_id: 'y', workdirs: [{ path: 'D:/repo/app/' }] },
+    { id: 'z1', project_id: 'z', workdirs: [{ path: 'D:\\repo\\other' }] },
+  ];
+  const repo = {
+    listTasks(status) {
+      return status === 'pending' ? pending.filter((task) => !started.includes(task.id)) : [];
+    },
+  };
+  const scheduler = new ProjectScheduler({
+    repo,
+    maxConcurrent: 3,
+    runTask: async (task) => {
+      started.push(task.id);
+      const gate = deferred();
+      gates.set(task.id, gate);
+      await gate.promise;
+    },
+  });
+
+  scheduler.kick();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(started.includes('x1'), true);
+  assert.equal(started.includes('z1'), true);
+  assert.equal(started.includes('y1'), false);
+
+  gates.get('x1').resolve();
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(started.includes('y1'), true);
+
+  for (const gate of gates.values()) gate.resolve();
+});
+
+test('plan 任务启动时不锁目录，同目录可并行规划', async () => {
+  const started = [];
+  const gates = new Map();
+  const pending = [
+    { id: 'p1', project_id: 'p', is_complex: 1, workdirs: [{ path: 'D:\\repo\\app' }] },
+    { id: 'q1', project_id: 'q', is_complex: 1, workdirs: [{ path: 'D:/repo/app/' }] },
+  ];
+  const repo = {
+    listTasks(status) {
+      return status === 'pending' ? pending.filter((task) => !started.includes(task.id)) : [];
+    },
+  };
+  const scheduler = new ProjectScheduler({
+    repo,
+    maxConcurrent: 3,
+    runTask: async (task) => {
+      started.push(task.id);
+      const gate = deferred();
+      gates.set(task.id, gate);
+      await gate.promise;
+    },
+  });
+
+  scheduler.kick();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(started.includes('p1'), true);
+  assert.equal(started.includes('q1'), true);
+  assert.equal(scheduler.workdirLock.heldCount, 0);
+
+  for (const gate of gates.values()) gate.resolve();
+});

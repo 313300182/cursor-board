@@ -11,9 +11,28 @@ const {
   appendTitleSuffix,
   statusForPhase,
   buildDeployRepairPrompt,
-  buildGitCommitPrompt,
-  parseGitCommitResult,
+  buildGitMessagePrompt,
+  parseGitMessage,
+  truncateMiddle,
 } = require('../pipeline');
+
+test('truncateMiddle 保留头尾并省略中间', () => {
+  assert.equal(truncateMiddle('short', 100), 'short');
+  const big = 'A'.repeat(20000);
+  const result = truncateMiddle(big, 8000);
+  assert.ok(result.length < big.length);
+  assert.match(result, /已省略 \d+ 个字符/);
+  assert.ok(result.startsWith('A'));
+  assert.ok(result.endsWith('A'));
+});
+
+test('parseTestResult 截断超长失败报错', () => {
+  const huge = `[TEST:FAIL]${'E'.repeat(20000)}`;
+  const result = parseTestResult(huge);
+  assert.equal(result.passed, false);
+  assert.ok(result.error.length < 20000);
+  assert.match(result.error, /已省略/);
+});
 
 test('parseTestResult 识别通过标记', () => {
   assert.deepEqual(parseTestResult('全部通过\n[TEST:PASS]'), {
@@ -134,20 +153,37 @@ test('buildDeployRepairPrompt 要求修复但不直接部署', () => {
   assert.match(prompt, /不要执行部署命令/);
 });
 
-test('buildGitCommitPrompt 包含提交标记说明', () => {
-  const prompt = buildGitCommitPrompt({
+test('buildGitMessagePrompt 列出已确定的提交文件并只索取提交信息', () => {
+  const prompt = buildGitMessagePrompt({
     taskTitle: '修复登录',
-    workdirs: [{ label: '', path: 'D:\\code\\app' }],
+    files: ['src/login.js', 'src/new.js'],
     push: true,
   });
   assert.match(prompt, /修复登录/);
-  assert.match(prompt, /\[GIT:COMMIT\]/);
+  assert.match(prompt, /src\/login\.js/);
+  assert.match(prompt, /src\/new\.js/);
+  assert.match(prompt, /\[GIT:MSG\]/);
+  assert.match(prompt, /\[GIT:END\]/);
   assert.match(prompt, /git push/);
+  assert.doesNotMatch(prompt, /\[GIT:CHANGES\]/);
 });
 
-test('parseGitCommitResult 识别提交与跳过', () => {
-  assert.equal(parseGitCommitResult('已提交\n[GIT:COMMIT] abc1234').ok, true);
-  assert.equal(parseGitCommitResult('无变更\n[GIT:SKIP]').skipped, true);
-  assert.equal(parseGitCommitResult('失败\n[GIT:FAIL]\nerror').ok, false);
-  assert.equal(parseGitCommitResult('缺少标记').reason, 'missing_marker');
+test('buildGitMessagePrompt 文件过多时折叠展示', () => {
+  const files = Array.from({ length: 60 }, (_, i) => `src/file${i}.js`);
+  const prompt = buildGitMessagePrompt({ taskTitle: 't', files });
+  assert.match(prompt, /另有 10 个文件/);
+});
+
+test('parseGitMessage 提取单行提交信息', () => {
+  const parsed = parseGitMessage([
+    '我写好了',
+    '[GIT:MSG]',
+    '- fix: 修复登录跳转',
+    '[GIT:END]',
+  ].join('\n'));
+  assert.equal(parsed.message, 'fix: 修复登录跳转');
+});
+
+test('parseGitMessage 无标记时返回 null 供兜底', () => {
+  assert.equal(parseGitMessage('随便说点什么').message, null);
 });

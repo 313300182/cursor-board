@@ -78,7 +78,7 @@
   }
 
   function appendLogChunk(chunks, payload) {
-    const next = Array.isArray(chunks) ? [...chunks] : [];
+    const next = Array.isArray(chunks) ? chunks : [];
     next.push({
       stream: normalizeLogStream(payload?.stream),
       text: payload?.chunk || '',
@@ -87,7 +87,7 @@
   }
 
   function appendPermissionChunk(chunks, payload) {
-    const next = Array.isArray(chunks) ? [...chunks] : [];
+    const next = Array.isArray(chunks) ? chunks : [];
     next.push({
       stream: 'system',
       text: `[审批] ${payload?.tool || 'unknown'} → ${payload?.action || 'unknown'}\n`,

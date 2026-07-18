@@ -1,5 +1,13 @@
 const { spawn } = require('child_process');
 const { buildDeployRepairPrompt } = require('./pipeline');
+const WorkdirLock = require('./workdir-lock');
+
+function projectWorkdirPaths(project) {
+  const entries = Array.isArray(project?.workdirs) && project.workdirs.length
+    ? project.workdirs.map((entry) => entry?.path)
+    : [];
+  return WorkdirLock.normalizePaths([project?.workdir, ...entries]);
+}
 
 /**
  * Project-level batch deployment with optional Agent-assisted repair.
@@ -12,6 +20,7 @@ class ProjectDeployer {
     runner,
     broadcast,
     executeCommand = runCommand,
+    workdirLock,
   }) {
     this.projects = projects;
     this.repo = repo;
@@ -19,6 +28,7 @@ class ProjectDeployer {
     this.broadcast = broadcast || (() => {});
     this.executeCommand = executeCommand;
     this.activeProjects = new Set();
+    this.workdirLock = workdirLock || new WorkdirLock();
   }
 
   async deployProject(projectId) {
@@ -26,9 +36,12 @@ class ProjectDeployer {
     const project = this.requireDeployableProject(projectId);
     const tasks = this.repo.listProjectPendingDeployTasks(projectId);
     this.activeProjects.add(projectId);
+    const lockOwner = `deploy:${projectId}`;
+    await this.workdirLock.acquire(lockOwner, projectWorkdirPaths(project));
     try {
       return await this.executeDeployment(project, tasks);
     } finally {
+      this.workdirLock.release(lockOwner);
       this.activeProjects.delete(projectId);
     }
   }
@@ -48,6 +61,8 @@ class ProjectDeployer {
     if (!this.runner) throw new Error('Agent Runner 未配置');
 
     this.activeProjects.add(projectId);
+    const lockOwner = `deploy:${projectId}`;
+    await this.workdirLock.acquire(lockOwner, projectWorkdirPaths(project));
     try {
       this.projects.updateDeployState(projectId, {
         deploy_status: 'fixing',
@@ -81,6 +96,7 @@ class ProjectDeployer {
       }
       throw error;
     } finally {
+      this.workdirLock.release(lockOwner);
       this.activeProjects.delete(projectId);
     }
   }

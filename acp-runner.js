@@ -14,9 +14,16 @@ const {
   appendTitleSuffix,
   buildSteerPrompt,
   shouldSkipTestFromMessage,
-  buildGitCommitPrompt,
-  parseGitCommitResult,
+  buildGitMessagePrompt,
+  parseGitMessage,
 } = require('./pipeline');
+const {
+  captureBaselineDirty,
+  collectTaskUnits,
+  commitSelectedUnits,
+  buildCommitMessage,
+} = require('./git-runner');
+const { createAcpLogger } = require('./acp-logger');
 
 /**
  * Run tasks through Cursor Agent ACP with auto-approval.
@@ -30,6 +37,12 @@ class AcpRunner {
     this.security = config.security || {};
     this.pendingInteractions = new Map();
     this.activeRuns = new Map();
+    this.git = config.gitRunner || {
+      captureBaselineDirty,
+      collectTaskUnits,
+      commitSelectedUnits,
+    };
+    this.acpLog = config.acpLogger || createAcpLogger({ enabled: config.acpLog !== false });
   }
 
   isTaskRunning(taskId) {
@@ -115,7 +128,7 @@ class AcpRunner {
     return this.runSingleTask(options);
   }
 
-  runSingleTask({ taskId, workdir, workdirs, prompt, attachments = [], mode = 'agent', modelId, resumeSessionId, onEvent }) {
+  runSingleTask({ taskId, workdir, workdirs, prompt, attachments = [], mode = 'agent', modelId, resumeSessionId, onEvent, acquireExecuteLock }) {
     return this.withSession({
       taskId,
       workdir,
@@ -124,8 +137,12 @@ class AcpRunner {
       resumeSessionId,
       onEvent,
       run: async (session) => {
+        if (mode !== 'plan') {
+          await acquireExecuteLock?.();
+        }
         await session.prompt(appendTitleSuffix(prompt), attachments);
         if (mode === 'plan' && session.context.planAccepted) {
+          await acquireExecuteLock?.();
           await session.prompt(
             '计划已经批准。现在切换到执行模式，严格按照已批准的计划完成任务，并在完成后汇报结果。',
           );
@@ -181,6 +198,7 @@ class AcpRunner {
     planMode = false,
     resumeSessionId,
     onEvent,
+    acquireExecuteLock,
   }) {
     return this.withSession({
       taskId,
@@ -197,17 +215,22 @@ class AcpRunner {
           if (onEvent) onEvent('phase', { phase, ...extra });
         };
 
+        let baseline = [];
         if (planMode) {
           await session.prompt(appendTitleSuffix(prompt), attachments);
           if (!session.context.planAccepted) {
             throw new Error('Plan 模式未生成可批准的计划');
           }
+          await acquireExecuteLock?.();
+          if (gitCommit) baseline = await this.git.captureBaselineDirty({ workdirs, workdir });
           emitPhase('dev');
           await session.prompt([
             '计划已经批准。现在切换到执行模式，严格按照已批准的计划完成开发，并在完成后汇报结果。',
             appendDevSuffix('', workdirs).trim(),
           ].join('\n'));
         } else {
+          await acquireExecuteLock?.();
+          if (gitCommit) baseline = await this.git.captureBaselineDirty({ workdirs, workdir });
           emitPhase('dev');
           await session.prompt(appendDevSuffix(prompt, workdirs), attachments);
         }
@@ -277,23 +300,61 @@ class AcpRunner {
 
         if (gitCommit) {
           emitPhase('commit');
-          await session.prompt(buildGitCommitPrompt({ taskTitle, workdirs, push: gitPush }));
-          const commitSummary = session.getTurnSummary();
-          assertAgentResultSucceeded(commitSummary);
-          const commitResult = parseGitCommitResult(commitSummary);
-          if (!commitResult.ok) {
-            throw new Error(`Git 提交失败: ${commitResult.error}`);
+          const editedPaths = Array.from(new Set(session.context.editedPaths || []));
+          const { units, dirState, diagnostics } = await this.git.collectTaskUnits({
+            workdirs,
+            workdir,
+            baseline,
+            editedPaths,
+          });
+          const failedRepo = dirState.find((item) => item.error);
+          if (failedRepo) {
+            throw new Error(`Git 提交失败: ${failedRepo.path}: ${failedRepo.error}`);
           }
-          if (commitResult.committed) {
+          if (diagnostics?.skipped?.length) {
             emit('log', {
-              chunk: '[system] Git 提交完成\n',
+              chunk: `[system] 以下文件在任务开始前已有未提交改动、且本任务未编辑，未纳入提交：${diagnostics.skipped.join('、')}\n`,
               stream: 'system',
             });
-          } else if (commitResult.skipped) {
+          }
+          if (diagnostics?.folded?.length) {
             emit('log', {
-              chunk: '[system] 无变更，已跳过 Git 提交\n',
+              chunk: `[system] 以下文件任务开始前已有改动，但本任务也编辑过，将整文件一并提交：${diagnostics.folded.join('、')}\n`,
               stream: 'system',
             });
+          }
+          if (!units.length) {
+            emit('log', { chunk: '[system] 无本任务相关变更，已跳过 Git 提交\n', stream: 'system' });
+          } else {
+            emit('log', {
+              chunk: `[system] 已确定本任务改动 ${units.length} 个文件，正在由 AI 生成提交信息…\n`,
+              stream: 'system',
+            });
+            await session.prompt(buildGitMessagePrompt({
+              taskTitle,
+              files: units.map((unit) => unit.path),
+              push: gitPush,
+            }));
+            const msgSummary = session.getTurnSummary();
+            assertAgentResultSucceeded(msgSummary);
+            const message = parseGitMessage(msgSummary).message || buildCommitMessage(taskTitle);
+            const commitResult = await this.git.commitSelectedUnits({
+              units,
+              selectedIds: units.map((unit) => unit.id),
+              message,
+              push: gitPush,
+            });
+            if (!commitResult.ok) {
+              throw new Error(`Git 提交失败: ${commitResult.error}`);
+            }
+            if (commitResult.committed) {
+              emit('log', {
+                chunk: `[system] Git 提交完成：${message}${commitResult.pushed ? '（已 push）' : ''}\n`,
+                stream: 'system',
+              });
+            } else {
+              emit('log', { chunk: '[system] 无匹配改动，已跳过 Git 提交\n', stream: 'system' });
+            }
           }
         }
 
@@ -314,7 +375,7 @@ class AcpRunner {
       const pending = new Map();
       const logChunks = [];
       const permissionEvents = [];
-      const context = { planAccepted: false, planRejectedReason: null };
+      const context = { planAccepted: false, planRejectedReason: null, editedPaths: [] };
       let finished = false;
       let sessionId = null;
       let turnChunks = [];
@@ -324,12 +385,17 @@ class AcpRunner {
         if (onEvent) onEvent(type, payload);
       };
 
+      const startedAt = Date.now();
+      let stderrTail = '';
+
       const child = spawn(this.agentBin, ['acp'], {
         cwd: workdir,
         stdio: ['pipe', 'pipe', 'pipe'],
         windowsHide: true,
         shell: true,
       });
+
+      this.acpLog.write('spawn', { taskId, mode, workdir, pid: child.pid });
 
       const activeRun = {
         aborted: false,
@@ -355,6 +421,13 @@ class AcpRunner {
         } catch {
           // ignore
         }
+        this.acpLog.write('finish', {
+          taskId,
+          ok: !err,
+          durationMs: Date.now() - startedAt,
+          error: err ? String(err.message || err) : null,
+          stderrTail: stderrTail ? stderrTail.slice(-2000) : null,
+        });
         if (err) reject(err);
         else resolve(result);
       };
@@ -451,13 +524,18 @@ class AcpRunner {
       child.stderr.on('data', (buf) => {
         const text = buf.toString().trim();
         if (text) {
+          stderrTail = `${stderrTail}${text}\n`.slice(-8000);
           emit('log', { chunk: `[stderr] ${text}`, stream: 'system' });
         }
       });
 
-      child.on('error', (err) => finish(err));
+      child.on('error', (err) => {
+        this.acpLog.write('process_error', { taskId, error: String(err?.message || err) });
+        finish(err);
+      });
 
       child.on('exit', (code) => {
+        this.acpLog.write('exit', { taskId, code, durationMs: Date.now() - startedAt });
         if (!finished && code && code !== 0) {
           finish(new Error(`Agent 进程退出，code=${code}`));
         }
@@ -489,6 +567,14 @@ class AcpRunner {
             emit('log', { chunk: update.content.text, stream: 'message' });
           } else if (update?.sessionUpdate === 'agent_thought_chunk' && update.content?.text) {
             emit('log', { chunk: update.content.text, stream: 'thinking' });
+          } else if (
+            (update?.sessionUpdate === 'tool_call' || update?.sessionUpdate === 'tool_call_update')
+            && update.kind === 'edit'
+            && Array.isArray(update.locations)
+          ) {
+            for (const location of update.locations) {
+              if (location?.path) context.editedPaths.push(location.path);
+            }
           }
           return;
         }

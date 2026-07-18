@@ -2,6 +2,8 @@ const { v4: uuidv4 } = require('uuid');
 const fs = require('fs');
 const AcpRunner = require('./acp-runner');
 const ProjectScheduler = require('./scheduler');
+const { taskWorkdirPaths } = ProjectScheduler;
+const WorkdirLock = require('./workdir-lock');
 const { normalizeWorkdirs } = require('./db');
 const {
   getTemplate,
@@ -41,10 +43,12 @@ class TaskQueue {
     this.config = config;
     this.broadcast = broadcast;
     this.runner = new AcpRunner(config);
+    this.workdirLock = new WorkdirLock();
     this.scheduler = new ProjectScheduler({
       repo,
       maxConcurrent: config.queue?.maxConcurrent || 3,
       runTask: (task) => this.runTask(task),
+      workdirLock: this.workdirLock,
     });
   }
 
@@ -389,6 +393,7 @@ class TaskQueue {
         prompt = `${buildIterationContextFallback(parentTask)}\n\n${prompt}`;
       }
 
+      const executeLockPaths = taskWorkdirPaths(task);
       const runnerOptions = {
         taskId: task.id,
         workdir: task.workdir,
@@ -398,6 +403,7 @@ class TaskQueue {
         modelId: task.model_id,
         resumeSessionId,
         onEvent,
+        acquireExecuteLock: () => this.workdirLock.acquire(task.id, executeLockPaths),
       };
       const project = this.projects.getProject(task.project_id);
       const gitCommit = Boolean(project?.git_enabled && task.git_commit);

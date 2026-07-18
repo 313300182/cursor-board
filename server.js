@@ -47,6 +47,7 @@ function main() {
     repo,
     runner: queue.runner,
     broadcast: (event, data) => broadcaster.send(event, data),
+    workdirLock: queue.workdirLock,
   });
   const chatService = new ChatService({
     chatRepo,

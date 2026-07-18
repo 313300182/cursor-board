@@ -1429,6 +1429,29 @@
       }
     }
 
+    const taskRenderScheduler={scheduled:false,lastRenderAt:0,timer:null};
+    const TASK_RENDER_MIN_INTERVAL=120;
+    function flushTaskRoundsRender(){
+      taskRenderScheduler.scheduled=false;
+      taskRenderScheduler.timer=null;
+      taskRenderScheduler.lastRenderAt=Date.now();
+      if(!state.selectedId)return;
+      const task=state.tasks.find(item=>item.id===state.selectedId)
+        ||state.archivedTasks.find(item=>item.id===state.selectedId);
+      if(task)renderTaskRounds(task);
+    }
+    function scheduleTaskRoundsRender(taskId){
+      if(taskId!==state.selectedId||taskRenderScheduler.scheduled)return;
+      taskRenderScheduler.scheduled=true;
+      const raf=window.requestAnimationFrame||(cb=>setTimeout(cb,16));
+      const elapsed=Date.now()-taskRenderScheduler.lastRenderAt;
+      if(elapsed>=TASK_RENDER_MIN_INTERVAL){
+        raf(flushTaskRoundsRender);
+      }else{
+        taskRenderScheduler.timer=setTimeout(()=>raf(flushTaskRoundsRender),TASK_RENDER_MIN_INTERVAL-elapsed);
+      }
+    }
+
     function formatProjectWorkdirs(project){
       const workdirs=project?.workdirs||[];
       if(!workdirs.length)return project?.workdir||'每次任务指定本地目录';
@@ -2489,18 +2512,12 @@
       source.addEventListener('task:log',event=>{
         const payload=JSON.parse(event.data);
         state.logChunks[payload.id]=appendLogChunk(state.logChunks[payload.id],payload);
-        if(payload.id===state.selectedId){
-          const task=state.tasks.find(item=>item.id===payload.id);
-          if(task)renderTaskRounds(task);
-        }
+        scheduleTaskRoundsRender(payload.id);
       });
       source.addEventListener('task:permission',event=>{
         const payload=JSON.parse(event.data);
         state.logChunks[payload.id]=appendPermissionChunk(state.logChunks[payload.id],payload);
-        if(payload.id===state.selectedId){
-          const task=state.tasks.find(item=>item.id===payload.id);
-          if(task)renderTaskRounds(task);
-        }
+        scheduleTaskRoundsRender(payload.id);
       });
       ['chat:created','chat:status','chat:message','chat:log','chat:done','chat:interaction'].forEach(name=>{
         source.addEventListener(name,event=>{

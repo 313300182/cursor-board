@@ -12,14 +12,13 @@
   }
 }(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   function statusGroup(status) {
-    if (status === 'developing') return 'developing';
-    if (status === 'testing') return 'testing';
-    if (status === 'committing') return 'committing';
+    if (['planning', 'running', 'developing', 'testing', 'committing'].includes(status)) {
+      return 'developing';
+    }
     if (['pending_deploy', 'deploying'].includes(status)) return 'deploy';
-    if (status === 'planning') return 'planning';
     if (['awaiting_input', 'pending_approval'].includes(status)) return 'waiting';
     if (['failed', 'needs_human'].includes(status)) return 'problem';
-    if (status === 'running') return 'running';
+    if (status === 'done') return 'done';
     return status;
   }
 

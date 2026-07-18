@@ -4,81 +4,301 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Cursor Board</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --bg:#0d1117;--panel:#161b22;--panel2:#0f141c;--border:#30363d;
-      --text:#e6edf3;--muted:#8b949e;--accent:#5794f2;--green:#3fb950;
-      --red:#f85149;--orange:#d29922;--purple:#a371f7;
+      --bg:#0D0F13;
+      --surface:#14161B;
+      --surface-2:#191C22;
+      --surface-hover:#1E222A;
+      --text:#E6E8EB;
+      --text-2:#9BA1AC;
+      --text-3:#6B7280;
+      --accent:#6366F1;
+      --accent-hover:#7C7FF2;
+      --accent-subtle:rgba(99,102,241,.14);
+      --border:rgba(255,255,255,.06);
+      --border-strong:rgba(255,255,255,.10);
+      --st-queued:#FBBF24;
+      --st-running:#60A5FA;
+      --st-done:#34D399;
+      --st-failed:#F87171;
+      --st-complex:#C084FC;
+      --radius:6px;
+      --radius-lg:8px;
+      --transition:180ms ease-out;
     }
-    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:"Segoe UI",sans-serif}
-    header{height:64px;padding:0 22px;border-bottom:1px solid var(--border);background:var(--panel);display:flex;align-items:center;justify-content:space-between}
-    header .brand{display:flex;align-items:center;gap:12px}.muted{color:var(--muted)} .hidden{display:none!important}
-    button,.button,input,select,textarea{border:1px solid var(--border);border-radius:8px;background:var(--panel2);color:var(--text);padding:9px 11px;font:inherit}
-    button,.button{cursor:pointer;background:#253249;font-weight:600;text-decoration:none}button.primary{background:var(--accent);border-color:var(--accent);color:white}
-    button.danger{background:#3d2023;color:#ffb3ad}input,select,textarea{width:100%}textarea{min-height:95px;resize:vertical}
+    *,*::before,*::after{box-sizing:border-box}
+    body{
+      margin:0;
+      background:var(--bg);
+      color:var(--text);
+      font-family:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+      font-size:14px;
+      line-height:1.5;
+    }
+    .meta,pre,.log-stream,.summary-box,.stats b{
+      font-family:"JetBrains Mono",ui-monospace,"Cascadia Code",monospace;
+      font-variant-numeric:tabular-nums;
+    }
+    header{
+      height:64px;
+      padding:0 22px;
+      border-bottom:1px solid var(--border);
+      background:var(--surface);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+    }
+    header .brand{display:flex;align-items:center;gap:12px}
+    .muted{color:var(--text-2)}
+    .hidden{display:none!important}
+    button,.button,input,select,textarea{
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      background:var(--surface-2);
+      color:var(--text);
+      padding:9px 11px;
+      font:inherit;
+      transition:border-color var(--transition),background-color var(--transition),color var(--transition),box-shadow var(--transition);
+    }
+    button,.button{
+      cursor:pointer;
+      background:var(--surface-hover);
+      font-weight:500;
+      font-size:13px;
+      text-decoration:none;
+    }
+    button:hover,.button:hover{background:var(--surface-2);border-color:var(--border-strong)}
+    button.primary,.button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+    button.primary:hover,.button.primary:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
+    button.danger{background:color-mix(in srgb,var(--st-failed) 14%,transparent);color:var(--st-failed);border-color:color-mix(in srgb,var(--st-failed) 30%,transparent)}
+    button.danger:hover{background:color-mix(in srgb,var(--st-failed) 22%,transparent)}
+    button:focus-visible,.button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,.card:focus-visible,.project-card:focus-visible,.template-card:focus-visible{
+      outline:2px solid var(--accent);
+      outline-offset:2px;
+    }
+    input,select,textarea{width:100%}
+    textarea{min-height:95px;resize:vertical}
     textarea.textarea-large{min-height:220px;line-height:1.5}
-    label{display:block;color:var(--muted);font-size:13px;margin:11px 0 6px}
-    .container{padding:20px;max-width:1800px;margin:auto}.panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
-    h1,h2,h3{margin:0 0 12px}.toolbar{display:flex;gap:10px;align-items:center}.toolbar>*{width:auto}
-    .projects-layout{display:grid;grid-template-columns:1fr 330px;gap:18px}.project-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
-    .project-card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;display:block;color:inherit;text-decoration:none}
-    .project-card:hover{border-color:var(--accent)}.project-card .path{font-size:12px;color:var(--muted);word-break:break-all;min-height:34px;white-space:pre-line}
+    label{display:block;color:var(--text-2);font-size:13px;font-weight:500;margin:11px 0 6px}
+    .container{padding:20px;max-width:1800px;margin:auto}
+    .panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px;box-shadow:none}
+    h1{margin:0 0 12px;font-size:20px;font-weight:600;letter-spacing:-0.02em}
+    h2{margin:0 0 12px;font-size:16px;font-weight:600}
+    h3{margin:0 0 12px;font-size:14px;font-weight:600}
+    .toolbar{display:flex;gap:10px;align-items:center}
+    .toolbar>*{width:auto}
+    .projects-layout{display:grid;grid-template-columns:1fr 330px;gap:18px}
+    .project-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+    .project-card{
+      background:var(--surface);
+      border:1px solid var(--border);
+      border-radius:var(--radius-lg);
+      padding:16px;
+      display:block;
+      color:inherit;
+      text-decoration:none;
+      box-shadow:none;
+      transition:border-color var(--transition),background-color var(--transition);
+    }
+    .project-card:hover{background:var(--surface-hover);border-color:var(--border-strong)}
+    .project-card .path{font-size:12px;color:var(--text-2);word-break:break-all;min-height:34px;white-space:pre-line}
     .workdir-list{display:flex;flex-direction:column;gap:8px;margin-top:4px}
     .workdir-row{display:grid;grid-template-columns:88px minmax(0,1fr) auto;gap:8px;align-items:center}
     .workdir-row input{margin:0}
     .workdir-row button{width:auto;padding:7px 10px;font-size:12px}
-    .workdirs-section{border:1px solid var(--border);border-radius:8px;margin-top:16px;background:var(--panel2);overflow:hidden}
+    .workdirs-section{border:1px solid var(--border);border-radius:var(--radius-lg);margin-top:16px;background:var(--surface-2);overflow:hidden}
     .workdirs-section summary{cursor:pointer;font-weight:600;padding:9px 11px;font-size:13px;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:8px}
     .workdirs-section summary::-webkit-details-marker{display:none}
     .workdirs-section .body{padding:0 10px 10px}
     .workdir-check-list{display:flex;flex-direction:column;gap:6px;margin-top:4px}
-    .workdir-check{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--panel2);cursor:pointer;font-size:13px;line-height:1.4}
+    .workdir-check{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface-2);cursor:pointer;font-size:13px;line-height:1.4;transition:background-color var(--transition),border-color var(--transition)}
+    .workdir-check:hover{background:var(--surface-hover)}
     .workdir-check input{margin:2px 0 0;flex-shrink:0;width:auto}
-    .workdir-check .path{font-size:11px;color:var(--muted);word-break:break-all;margin-top:2px}
-    .stats{display:flex;gap:12px;margin-top:14px;font-size:12px}.stats b{font-size:17px;display:block}
-    .project-layout{display:grid;grid-template-columns:360px minmax(0,1fr);gap:14px;align-items:start}
-    .board{display:grid;grid-template-columns:repeat(9,minmax(120px,1fr));gap:9px;overflow-x:auto}
-    .column{background:var(--panel2);border:1px solid var(--border);border-radius:10px;min-height:480px;padding:9px}
-    .column h3{font-size:12px;color:var(--muted);display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap}
+    .workdir-check .path{font-size:11px;color:var(--text-3);word-break:break-all;margin-top:2px;font-family:"JetBrains Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+    .stats{display:flex;gap:12px;margin-top:14px;font-size:12px;color:var(--text-2)}
+    .stats b{font-size:17px;display:block;color:var(--text)}
+    .project-layout{display:grid;grid-template-columns:320px minmax(0,1fr);gap:14px;align-items:start}
+    .board{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px;min-width:0}
+    .board-problems{
+      margin-bottom:12px;
+      padding:10px 12px;
+      border:1px solid color-mix(in srgb,var(--st-failed) 35%,transparent);
+      border-radius:var(--radius-lg);
+      background:color-mix(in srgb,var(--st-failed) 8%,transparent);
+    }
+    .board-problems h3{
+      margin:0 0 8px;
+      font-size:12px;
+      font-weight:600;
+      letter-spacing:.04em;
+      text-transform:uppercase;
+      color:var(--st-failed);
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+    .board-problems .cards{
+      display:flex;
+      gap:10px;
+      overflow-x:auto;
+      padding-bottom:2px;
+    }
+    .board-problems .card{
+      flex:0 0 min(320px,88vw);
+      margin-bottom:0;
+      border-color:color-mix(in srgb,var(--st-failed) 30%,transparent);
+    }
+    .board-actions{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-bottom:12px;
+      padding:8px 10px;
+      border:1px solid var(--border);
+      border-radius:var(--radius-lg);
+      background:var(--surface-2);
+    }
+    .board-actions .status{
+      flex:1;
+      min-width:140px;
+      font-size:12px;
+      color:var(--text-2);
+      font-family:"JetBrains Mono",ui-monospace,monospace;
+      font-variant-numeric:tabular-nums;
+    }
+    .board-actions .spacer{flex:1}
+    .column{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-lg);min-height:420px;padding:12px;box-shadow:none;min-width:0}
+    .column h3{
+      font-size:12px;
+      font-weight:600;
+      letter-spacing:.04em;
+      text-transform:uppercase;
+      color:var(--text-2);
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:8px;
+      flex-wrap:nowrap;
+      white-space:nowrap;
+    }
+    .column h3 .sub-label{font-size:10px;font-weight:500;color:var(--text-3);text-transform:none;letter-spacing:0}
     .column-actions{display:flex;gap:4px;flex-wrap:wrap}
-    .column-actions button{padding:2px 7px;font-size:10px;font-weight:500}
+    .column-actions button{padding:2px 7px;font-size:11px;font-weight:500}
     .column-footer{margin-top:6px}
     .column-footer button{width:100%;padding:5px 8px;font-size:11px;font-weight:500}
     .archived-section{margin-top:8px;border-top:1px dashed var(--border);padding-top:8px}
-    .archived-section summary{cursor:pointer;font-size:11px;color:var(--muted);list-style:none}
+    .archived-section summary{cursor:pointer;font-size:11px;color:var(--text-3);list-style:none}
     .archived-section summary::-webkit-details-marker{display:none}
     .archived-section .card{opacity:.82}
-    .card{background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:10px;margin-bottom:8px;cursor:pointer}
-    .card:hover,.card.active{border-color:var(--accent)}.card-title{font-weight:600;font-size:13px}.meta{font-size:11px;color:var(--muted);margin-top:6px}
+    .card{
+      background:var(--surface);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      padding:12px;
+      margin-bottom:8px;
+      cursor:pointer;
+      box-shadow:none;
+      transition:border-color var(--transition),background-color var(--transition);
+    }
+    .card:hover{background:var(--surface-hover);border-color:var(--border-strong)}
+    .card.active{border-color:var(--accent);background:var(--accent-subtle)}
+    .card-title{font-weight:600;font-size:14px;line-height:1.45;word-break:break-word}
+    .meta{font-size:12px;font-weight:500;color:var(--text-2);margin-top:6px;line-height:1.45;word-break:break-word}
+    .status-chip{display:inline-block;font-size:10px;font-weight:600;padding:1px 6px;border-radius:99px;margin-top:6px;background:var(--surface-hover);color:var(--text-2)}
+    .status-chip.active{color:var(--st-running);background:color-mix(in srgb,var(--st-running) 14%,transparent)}
+    .status-chip.wait{color:var(--st-queued);background:color-mix(in srgb,var(--st-queued) 14%,transparent)}
+    .status-chip.fail{color:var(--st-failed);background:color-mix(in srgb,var(--st-failed) 14%,transparent)}
     .column.stack-column .cards{display:flex;flex-direction:column}
-    .column.stack-column .card{margin-bottom:0;box-shadow:0 1px 0 rgba(255,255,255,.04)}
-    .column.stack-column .card+.card{margin-top:-3px;border-top-color:#252c36}
-    .column.stack-column .card:last-child{border-color:var(--green);box-shadow:0 0 0 1px rgba(63,185,80,.35)}
-    .badge{display:inline-block;font-size:10px;padding:2px 7px;border-radius:99px;margin-top:7px;background:#2b3442}
-    .queue-next{background:#1f3a2d;color:#7ee787}
-    .complex{background:#352656;color:#d8b9ff}.pipeline{background:#1f3a2d;color:#7ee787}.status-running,.status-planning{color:#79b8ff}.status-done{color:#7ee787}.status-failed{color:#ff7b72}.status-wait{color:#e3b341}
-    pre,.markdown{background:#0b0f14;border:1px solid var(--border);padding:10px;border-radius:8px;white-space:pre-wrap;overflow-wrap:break-word;font-size:12px;max-height:310px;overflow:auto}
-    .markdown h1,.markdown h2,.markdown h3{margin:12px 0 6px}.markdown p{margin:5px 0}.markdown ul{margin:5px 0 5px 18px;padding:0}.markdown li{margin:3px 0}.markdown code{background:#222a35;padding:1px 4px;border-radius:4px}.markdown strong{font-weight:600;color:#fff}
-    .rule{border-top:1px solid var(--border);padding-top:10px;margin-top:10px}.rule summary{cursor:pointer;font-weight:600}
-    .switch-row{display:flex;align-items:center;justify-content:space-between;margin-top:14px}.switch{position:relative;width:44px;height:24px}
-    .switch input{opacity:0;width:0;height:0}.slider{position:absolute;inset:0;background:#39414d;border-radius:20px;cursor:pointer}.slider:before{content:"";position:absolute;width:18px;height:18px;left:3px;top:3px;background:white;border-radius:50%;transition:.2s}.switch input:checked+.slider{background:var(--purple)}.switch input:checked+.slider:before{transform:translateX(20px)}
-    .template-section{border:1px solid var(--border);border-radius:8px;margin:11px 0 6px;background:var(--panel2);overflow:hidden}
+    .column.stack-column .card{margin-bottom:0;box-shadow:none}
+    .column.stack-column .card+.card{margin-top:-1px;border-top-color:var(--border)}
+    .column.stack-column .card:last-child{
+      border-color:var(--st-queued);
+      box-shadow:0 0 0 1px color-mix(in srgb,var(--st-queued) 35%,transparent);
+    }
+    .badge{display:inline-block;font-size:11px;font-weight:500;padding:2px 7px;border-radius:99px;margin-top:7px;background:var(--surface-hover);color:var(--text-2)}
+    .queue-next{background:color-mix(in srgb,var(--st-queued) 14%,transparent);color:var(--st-queued)}
+    .complex{background:color-mix(in srgb,var(--st-complex) 14%,transparent);color:var(--st-complex)}
+    .pipeline{background:color-mix(in srgb,var(--st-done) 14%,transparent);color:var(--st-done)}
+    .status-running,.status-planning{color:var(--st-running)}
+    .status-done{color:var(--st-done)}
+    .status-failed{color:var(--st-failed)}
+    .status-wait{color:var(--st-queued)}
+    pre,.markdown{
+      background:var(--bg);
+      border:1px solid var(--border);
+      padding:10px;
+      border-radius:var(--radius-lg);
+      white-space:pre-wrap;
+      overflow-wrap:break-word;
+      font-size:12px;
+      max-height:310px;
+      overflow:auto;
+    }
+    .markdown h1,.markdown h2,.markdown h3{margin:12px 0 6px}
+    .markdown p{margin:5px 0}
+    .markdown ul{margin:5px 0 5px 18px;padding:0}
+    .markdown li{margin:3px 0}
+    .markdown code{background:var(--surface-hover);padding:1px 4px;border-radius:4px;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px}
+    .markdown strong{font-weight:600;color:var(--text)}
+    .rule{border-top:1px solid var(--border);padding-top:10px;margin-top:10px}
+    .rule summary{cursor:pointer;font-weight:600}
+    .switch-row{display:flex;align-items:center;justify-content:space-between;margin-top:14px}
+    .switch{position:relative;width:44px;height:24px}
+    .switch input{opacity:0;width:0;height:0}
+    .slider{
+      position:absolute;
+      inset:0;
+      background:var(--surface-hover);
+      border-radius:20px;
+      cursor:pointer;
+      transition:background-color var(--transition);
+    }
+    .slider:before{
+      content:"";
+      position:absolute;
+      width:18px;
+      height:18px;
+      left:3px;
+      top:3px;
+      background:var(--text);
+      border-radius:50%;
+      transition:transform var(--transition);
+    }
+    .switch input:checked+.slider{background:var(--accent)}
+    .switch input:checked+.slider:before{transform:translateX(20px)}
+    .template-section{border:1px solid var(--border);border-radius:var(--radius-lg);margin:11px 0 6px;background:var(--surface-2);overflow:hidden}
     .template-section summary{cursor:pointer;font-weight:600;padding:9px 11px;font-size:13px;color:var(--text);list-style:none;display:flex;align-items:center;justify-content:space-between;gap:8px}
     .template-section summary::-webkit-details-marker{display:none}
-    .template-section summary::after{content:"▸";color:var(--muted);font-size:11px;flex-shrink:0}
+    .template-section summary::after{content:"▸";color:var(--text-2);font-size:11px;flex-shrink:0}
     .template-section[open] summary{border-bottom:1px solid var(--border)}
     .template-section[open] summary::after{content:"▾"}
     .template-section summary .muted{font-weight:400}
     .template-picker-body{padding:8px 10px 10px}
-    .template-category{font-size:10px;color:var(--muted);margin:8px 0 4px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+    .template-category{font-size:12px;color:var(--text-2);margin:8px 0 4px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
     .template-category:first-child{margin-top:0}
     .template-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:2px}
-    .template-card{padding:6px 9px;border:1px solid var(--border);border-radius:7px;cursor:pointer;font-size:12px;background:var(--panel);text-align:left;width:100%}
-    .template-card:hover,.template-card.active{border-color:var(--accent);background:#1a2433}
+    .template-card{
+      padding:6px 9px;
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      cursor:pointer;
+      font-size:12px;
+      background:var(--surface);
+      text-align:left;
+      width:100%;
+      transition:border-color var(--transition),background-color var(--transition);
+    }
+    .template-card:hover{background:var(--surface-hover);border-color:var(--border-strong)}
+    .template-card.active{border-color:var(--accent);background:var(--accent-subtle)}
     .template-card .name{font-weight:600;font-size:12px;line-height:1.3}
     .rule-section summary{cursor:pointer;font-weight:600;margin-bottom:8px}
     .rule-section summary::-webkit-details-marker{display:none}
-    .rule-section summary::before{content:"▸ ";color:var(--muted);font-size:11px}
+    .rule-section summary::before{content:"▸ ";color:var(--text-2);font-size:11px}
     .rule-section[open] summary::before{content:"▾ "}
     .variable-fields{margin-top:4px}
     .field-block{margin-bottom:4px}
@@ -87,58 +307,123 @@
     .field-toolbar .toolbar{margin:0;gap:6px}
     .field-toolbar button{padding:4px 8px;font-size:11px;font-weight:500}
     .image-previews{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
-    .image-preview{position:relative;width:72px;height:72px;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#0b0f14}
+    .image-preview{position:relative;width:72px;height:72px;border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;background:var(--bg)}
     .image-preview img{width:100%;height:100%;object-fit:cover;display:block}
-    .image-preview button{position:absolute;top:2px;right:2px;width:20px;height:20px;padding:0;border-radius:50%;font-size:12px;line-height:1;background:rgba(0,0,0,.75);color:#fff;border:none}
+    .image-preview button{position:absolute;top:2px;right:2px;width:20px;height:20px;padding:0;border-radius:50%;font-size:12px;line-height:1;background:rgba(0,0,0,.6);color:var(--text);border:none}
     .drawer-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:90}
-    .task-drawer{position:fixed;top:0;right:0;width:min(420px,92vw);height:100vh;background:var(--panel);border-left:1px solid var(--border);z-index:100;display:flex;flex-direction:column;box-shadow:-8px 0 24px rgba(0,0,0,.35)}
+    .task-drawer{
+      position:fixed;
+      top:0;
+      right:0;
+      width:min(420px,92vw);
+      height:100vh;
+      background:var(--surface);
+      border-left:1px solid var(--border);
+      z-index:100;
+      display:flex;
+      flex-direction:column;
+      box-shadow:-4px 0 24px rgba(0,0,0,.25);
+    }
     .task-drawer-header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:16px;border-bottom:1px solid var(--border)}
-    .task-drawer-header h3{margin:0;font-size:15px;line-height:1.4}
+    .task-drawer-header h3{margin:0;font-size:14px;line-height:1.4;font-weight:600}
     .task-drawer-body{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
     .output-section{display:flex;flex-direction:column;gap:6px;min-height:0}
-    .output-section h3{margin:0;font-size:13px;color:var(--muted);font-weight:600}
-    .log-stream,.summary-box{background:#0b0f14;border:1px solid var(--border);padding:10px;border-radius:8px;font-size:12px;overflow:auto}
+    .output-section h3{margin:0;font-size:13px;color:var(--text-2);font-weight:600}
+    .log-stream,.summary-box{
+      background:var(--bg);
+      border:1px solid var(--border);
+      padding:10px;
+      border-radius:var(--radius-lg);
+      font-size:12px;
+      overflow:auto;
+    }
     .log-stream{flex:1;min-height:180px;max-height:340px}
     .summary-box{min-height:96px;max-height:220px;color:var(--text)}
-    .summary-box.placeholder{color:var(--muted);font-style:italic}
+    .summary-box.placeholder{color:var(--text-3);font-style:italic}
     .log-chunk{white-space:pre-wrap;overflow-wrap:break-word;margin:0}
-    .log-chunk+.log-chunk{margin-top:8px;padding-top:8px;border-top:1px dashed rgba(48,54,61,.7)}
-    .log-chunk-thinking{color:#b197fc;border-left:2px solid var(--purple);padding-left:8px}
-    .log-chunk-message{color:var(--text);line-height:1.55}
+    .log-chunk+.log-chunk{margin-top:8px;padding-top:8px;border-top:1px dashed var(--border)}
+    .log-chunk-thinking{color:var(--st-complex);border-left:2px solid var(--st-complex);padding-left:8px}
+    .log-chunk-message{color:var(--text);line-height:1.5}
     .log-chunk-message h1,.log-chunk-message h2,.log-chunk-message h3{margin:10px 0 4px;font-size:13px}
     .log-chunk-message p{margin:4px 0}
     .log-chunk-message ul{margin:4px 0 4px 18px;padding:0}
     .log-chunk-message li{margin:2px 0}
-    .log-chunk-message code{background:#222a35;padding:1px 4px;border-radius:4px}
-    .log-chunk-message strong{font-weight:600;color:#fff}
-    .log-chunk-system{color:var(--orange);font-size:11px;white-space:pre-wrap}
+    .log-chunk-message code{background:var(--surface-hover);padding:1px 4px;border-radius:4px;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px}
+    .log-chunk-message strong{font-weight:600;color:var(--text)}
+    .log-chunk-system{color:var(--st-queued);font-size:11px;white-space:pre-wrap}
     .drawer-close{padding:4px 10px;font-size:12px}
     .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:110;display:flex;align-items:center;justify-content:center;padding:16px}
-    .modal-panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:18px;width:min(520px,96vw);box-shadow:0 12px 40px rgba(0,0,0,.45)}
-    .modal-panel h3{margin:0 0 6px;font-size:16px}
+    .modal-panel{
+      background:var(--surface);
+      border:1px solid var(--border);
+      border-radius:var(--radius-lg);
+      padding:18px;
+      width:min(520px,96vw);
+      box-shadow:0 8px 32px rgba(0,0,0,.28);
+    }
+    .modal-panel h3{margin:0 0 6px;font-size:16px;font-weight:600}
     .modal-panel .muted{margin-bottom:12px;font-size:12px}
+    .modal-panel.modal-wide{width:min(640px,96vw)}
+    .modal-section{margin-top:16px;padding-top:14px;border-top:1px solid var(--border)}
+    .modal-section:first-of-type{margin-top:0;padding-top:0;border-top:none}
+    .modal-section h4{margin:0 0 10px;font-size:13px;font-weight:600;color:var(--text-2)}
     .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
-    .interaction{border:1px solid var(--orange);background:#231d10;border-radius:9px;padding:12px;margin-top:12px}.option{display:flex;gap:8px;align-items:center;margin:7px 0}.option input{width:auto}
-    .steer-panel{border:1px solid var(--accent);background:#121b2a;border-radius:9px;padding:12px;display:flex;flex-direction:column;gap:8px}
-    .steer-panel h3{margin:0;font-size:13px;color:var(--muted)}
+    body.auth-locked>header,body.auth-locked>.container{visibility:hidden}
+    .login-gate{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;background:radial-gradient(circle at 50% 20%,rgba(99,102,241,.16),transparent 42%),var(--bg)}
+    .login-panel{width:min(390px,100%);padding:28px;background:var(--surface);border:1px solid var(--border-strong);border-radius:12px;box-shadow:0 24px 80px rgba(0,0,0,.42)}
+    .login-mark{width:42px;height:42px;display:grid;place-items:center;margin-bottom:18px;border-radius:10px;background:var(--accent);color:#fff;font-weight:700;font-size:18px}
+    .login-panel h1{font-size:22px;margin-bottom:6px}
+    .login-panel .primary{width:100%;margin-top:18px;padding:11px}
+    .login-hint{margin:0 0 18px;color:var(--text-2);font-size:13px}
+    .password-note{font-size:12px;color:var(--text-3);margin-top:8px}
+    .interaction{
+      border:1px solid color-mix(in srgb,var(--st-queued) 40%,transparent);
+      background:color-mix(in srgb,var(--st-queued) 10%,transparent);
+      border-radius:var(--radius);
+      padding:12px;
+      margin-top:12px;
+    }
+    .option{display:flex;gap:8px;align-items:center;margin:7px 0}
+    .option input{width:auto}
+    .steer-panel{
+      border:1px solid var(--accent);
+      background:var(--accent-subtle);
+      border-radius:var(--radius);
+      padding:12px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+    .steer-panel h3{margin:0;font-size:13px;color:var(--text-2)}
     .steer-panel textarea{min-height:72px;font-size:12px}
     .steer-panel .toolbar{margin:0;flex-wrap:wrap}
     .steer-panel .toolbar button{font-size:12px;padding:7px 10px}
-    .project-deploy{display:flex;align-items:flex-end;gap:8px;padding:10px;margin-bottom:12px;border:1px solid var(--border);border-radius:9px;background:var(--panel2)}
-    .project-deploy .command{flex:1}.project-deploy label{margin:0 0 5px}.project-deploy .status{min-width:120px;font-size:12px;color:var(--muted)}
-    .project-deploy button{white-space:nowrap}
-    #logBox{min-height:120px}.error{color:#ff938a;font-size:13px;margin-top:8px}
+    @media(max-width:1400px){.board{grid-template-columns:repeat(3,minmax(0,1fr))}}
+    @media(max-width:900px){.board{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    @media(max-width:640px){.board{grid-template-columns:1fr}}
+    #logBox{min-height:120px}
+    .error{color:var(--st-failed);font-size:13px;margin-top:8px}
     @media(max-width:1250px){.project-layout{grid-template-columns:1fr}.projects-layout{grid-template-columns:1fr}}
+    @media(prefers-reduced-motion:reduce){
+      *,*::before,*::after{
+        transition-duration:0.01ms!important;
+        animation-duration:0.01ms!important;
+      }
+    }
   </style>
 </head>
-<body>
+<body class="auth-locked">
   <header>
     <div class="brand">
       <a id="homeBtn" class="button hidden" href="/">← 项目</a>
       <strong>Cursor Board</strong>
       <span id="pageTitle" class="muted">项目中心</span>
     </div>
-    <div class="toolbar"><span id="queueState" class="muted"></span><span id="connState" class="muted">未连接</span></div>
+    <div class="toolbar">
+      <span id="queueState" class="muted"></span>
+      <span id="connState" class="muted">未连接</span>
+      <button type="button" id="securityBtn" class="hidden">安全设置</button>
+    </div>
   </header>
 
   <div class="container">
@@ -173,7 +458,7 @@
         <h2>新建任务</h2>
         <div id="titlePreviewGroup">
           <label>任务标题</label>
-          <div id="titlePreview" class="muted" style="font-size:13px;line-height:1.5;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--panel2)">填写任务描述后自动生成</div>
+          <div id="titlePreview" class="muted" style="font-size:13px;line-height:1.5;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface-2)">填写任务描述后自动生成</div>
         </div>
         <div id="titleInputGroup" class="hidden">
           <label>标题 <span class="muted">(可选，留空则自动总结)</span></label>
@@ -202,60 +487,100 @@
         <label>执行模型</label><select id="modelSelect"></select>
         <button id="createTaskBtn" class="primary" style="width:100%;margin-top:14px">提交到项目队列</button>
         <div id="taskError" class="error"></div>
-        <details id="workdirsSection" class="workdirs-section hidden">
-          <summary>工作目录 <span id="workdirsCount" class="badge">0</span></summary>
-          <div class="body">
-            <div id="projectWorkdirsEditor" class="workdir-list"></div>
-            <button type="button" id="addProjectWorkdirEditorBtn" style="width:100%;margin-top:8px">添加目录</button>
-            <button type="button" id="saveWorkdirsBtn" class="primary" style="width:100%;margin-top:10px">保存目录</button>
-            <div id="workdirsError" class="error"></div>
-          </div>
-        </details>
         <div id="rulesPanel" style="margin-top:20px"><h3>Cursor Rules</h3><div class="muted">加载中...</div></div>
       </aside>
 
       <main class="panel">
         <div class="toolbar" style="justify-content:space-between;margin-bottom:12px">
           <div><h2 id="projectHeading">任务看板</h2><div id="projectPath" class="muted"></div></div>
-          <button id="refreshBtn">刷新</button>
+          <div class="toolbar">
+            <button type="button" id="projectConfigBtn" class="hidden">项目配置</button>
+            <button id="refreshBtn">刷新</button>
+          </div>
         </div>
-        <div id="projectDeployBar" class="project-deploy hidden">
-          <div class="command">
-            <label>项目部署命令</label>
-            <input id="deployCommandInput" placeholder="例如：npm run deploy" />
-          </div>
-          <div class="command" style="min-width:140px">
-            <label>Git</label>
-            <div style="display:flex;gap:10px;align-items:center;height:38px">
-              <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:12px">
-                <input id="projectGitEnabledEditor" type="checkbox" />启用
-              </label>
-              <label id="projectGitPushEditorWrap" style="margin:0;display:flex;align-items:center;gap:6px;font-size:12px" class="hidden">
-                <input id="projectGitPushEditor" type="checkbox" />推送
-              </label>
-            </div>
-          </div>
-          <button id="saveDeployCommandBtn">保存命令</button>
-          <button id="saveProjectGitBtn">保存 Git</button>
-          <button id="deployProjectBtn" class="primary">部署（0）</button>
+        <div id="projectActionsBar" class="board-actions hidden">
           <div id="deployProjectStatus" class="status"></div>
+          <span class="spacer"></span>
           <button id="approveDeployFixBtn" class="hidden">批准 Agent 修复</button>
           <button id="rejectDeployFixBtn" class="hidden">暂不修复</button>
+          <button id="deployProjectBtn" class="primary">部署（0）</button>
+        </div>
+        <div id="boardProblems" class="board-problems hidden">
+          <h3>异常 <span class="count"></span></h3>
+          <div class="cards"></div>
         </div>
         <div class="board">
           <div class="column" data-group="pending"><h3>待执行 <span class="count"></span></h3><div class="cards"></div></div>
-          <div class="column" data-group="planning"><h3>规划中 <span class="count"></span></h3><div class="cards"></div></div>
           <div class="column" data-group="waiting"><h3>待确认 <span class="count"></span></h3><div class="cards"></div></div>
-          <div class="column" data-group="developing"><h3>开发中 <span class="count"></span></h3><div class="cards"></div></div>
-          <div class="column" data-group="testing"><h3>测试中 <span class="count"></span></h3><div class="cards"></div></div>
-          <div class="column" data-group="committing"><h3>提交中 <span class="count"></span></h3><div class="cards"></div></div>
-          <div class="column" data-group="running"><h3>执行中 <span class="count"></span></h3><div class="cards"></div></div>
+          <div class="column" data-group="developing"><h3><span>开发中 <span class="count"></span></span><span class="sub-label">含规划/测试/提交</span></h3><div class="cards"></div></div>
           <div class="column" data-group="deploy"><h3>待部署 <span class="count"></span></h3><div class="cards"></div></div>
           <div class="column" data-group="done"><h3><span>已完成 <span class="count"></span></span><span class="column-actions"></span></h3><div class="cards"></div><div class="column-footer"></div></div>
-          <div class="column" data-group="problem"><h3>异常 <span class="count"></span></h3><div class="cards"></div></div>
         </div>
       </main>
     </section>
+  </div>
+
+  <div id="projectConfigModal" class="modal-backdrop hidden">
+    <form id="projectConfigForm" class="modal-panel modal-wide" role="dialog" aria-labelledby="projectConfigTitle">
+      <h3 id="projectConfigTitle">项目配置</h3>
+      <p class="muted">管理工作目录、部署命令与 Git 关联，保存后立即生效。</p>
+      <div class="modal-section">
+        <h4>工作目录</h4>
+        <div id="projectWorkdirsEditor" class="workdir-list"></div>
+        <button type="button" id="addProjectWorkdirEditorBtn" style="width:100%;margin-top:8px">添加目录</button>
+      </div>
+      <div class="modal-section">
+        <h4>部署命令</h4>
+        <input id="deployCommandInput" placeholder="例如：npm run deploy" />
+      </div>
+      <div class="modal-section">
+        <h4>Git 关联</h4>
+        <div class="switch-row" style="margin-top:0">
+          <div><strong>启用 Git</strong><div class="muted" style="font-size:11px">启用后流水线任务可提交代码</div></div>
+          <label class="switch"><input id="projectGitEnabledEditor" type="checkbox"><span class="slider"></span></label>
+        </div>
+        <div id="projectGitPushEditorWrap" class="switch-row hidden">
+          <div><strong>提交后推送</strong><div class="muted" style="font-size:11px">Git 提交成功后自动 push</div></div>
+          <label class="switch"><input id="projectGitPushEditor" type="checkbox"><span class="slider"></span></label>
+        </div>
+      </div>
+      <div id="projectConfigError" class="error"></div>
+      <div class="modal-actions">
+        <button type="button" id="projectConfigCancelBtn">取消</button>
+        <button type="submit" id="projectConfigSaveBtn" class="primary">保存配置</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="loginGate" class="login-gate">
+    <form id="loginForm" class="login-panel">
+      <div class="login-mark">CB</div>
+      <h1>登录 Cursor Board</h1>
+      <p class="login-hint">输入访问密码后继续。仅在受信任的局域网中使用。</p>
+      <label for="loginPassword">访问密码</label>
+      <input id="loginPassword" type="password" autocomplete="current-password" autofocus />
+      <div id="loginError" class="error" role="alert"></div>
+      <button type="submit" id="loginBtn" class="primary">登录</button>
+    </form>
+  </div>
+
+  <div id="passwordModal" class="modal-backdrop hidden">
+    <form id="passwordForm" class="modal-panel" role="dialog" aria-labelledby="passwordModalTitle">
+      <h3 id="passwordModalTitle">修改访问密码</h3>
+      <p class="muted">修改后，其他设备上的旧登录会立即失效。</p>
+      <label for="currentPassword">当前密码</label>
+      <input id="currentPassword" type="password" autocomplete="current-password" />
+      <label for="newPassword">新密码</label>
+      <input id="newPassword" type="password" minlength="6" autocomplete="new-password" />
+      <label for="confirmPassword">确认新密码</label>
+      <input id="confirmPassword" type="password" minlength="6" autocomplete="new-password" />
+      <div class="password-note">至少 6 位，建议使用 12 位以上的独立密码。</div>
+      <div id="passwordError" class="error" role="alert"></div>
+      <div class="modal-actions">
+        <button type="button" id="passwordCancelBtn">取消</button>
+        <button type="submit" id="passwordSaveBtn" class="primary">保存密码</button>
+      </div>
+    </form>
   </div>
 
   <div id="drawerBackdrop" class="drawer-backdrop hidden"></div>
@@ -303,6 +628,7 @@
       selectedId: null, logChunks: {}, models: { options: [] }, fieldImages: {},
       doneExpanded: false, archivedTasks: [], showArchived: false,
       iterateSourceId: null,
+      eventSource: null,
     };
     const $ = (id) => document.getElementById(id);
 
@@ -310,17 +636,107 @@
     async function api(path,options={}){
       const response=await fetch(path,{...options,headers:{...headers(),...(options.headers||{})}});
       const data=await response.json().catch(()=>({}));
-      if(!response.ok)throw new Error(data.error||`HTTP ${response.status}`);
+      if(!response.ok){
+        const error=new Error(data.error||`HTTP ${response.status}`);
+        error.status=response.status;
+        if(response.status===401&&path!=='/api/auth/password')showLogin('登录已失效，请重新输入密码');
+        throw error;
+      }
       return data;
     }
     function escapeHtml(value){return TaskDisplay.escapeHtml(value)}
     function markdown(value){return TaskDisplay.formatMarkdown(value)}
 
     async function bootstrap(){
-      const data=await fetch('/api/bootstrap').then(r=>r.json());
-      if(!state.token){state.token=data.token;localStorage.setItem('cursorBoardToken',state.token)}
+      const data=await api('/api/bootstrap');
       state.models=data.models||{options:[]};
       state.templates=await api('/api/templates');
+    }
+
+    function showLogin(message=''){
+      state.eventSource?.close();
+      state.eventSource=null;
+      state.token='';
+      localStorage.removeItem('cursorBoardToken');
+      document.body.classList.add('auth-locked');
+      $('loginGate').classList.remove('hidden');
+      $('securityBtn').classList.add('hidden');
+      $('loginError').textContent=message;
+      setTimeout(()=>$('loginPassword').focus(),0);
+    }
+
+    function unlockBoard(){
+      document.body.classList.remove('auth-locked');
+      $('loginGate').classList.add('hidden');
+      $('securityBtn').classList.remove('hidden');
+    }
+
+    async function submitLogin(event){
+      event.preventDefault();
+      const button=$('loginBtn');
+      button.disabled=true;
+      $('loginError').textContent='';
+      try{
+        const response=await fetch('/api/auth/login',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({password:$('loginPassword').value}),
+        });
+        const data=await response.json().catch(()=>({}));
+        if(!response.ok)throw new Error(data.error||'登录失败');
+        state.token=data.token;
+        localStorage.setItem('cursorBoardToken',state.token);
+        $('loginPassword').value='';
+        await startBoard();
+      }catch(error){
+        $('loginError').textContent=error.message;
+      }finally{
+        button.disabled=false;
+      }
+    }
+
+    function openPasswordModal(){
+      $('passwordForm').reset();
+      $('passwordError').textContent='';
+      $('passwordModal').classList.remove('hidden');
+      $('currentPassword').focus();
+    }
+
+    function closePasswordModal(){
+      $('passwordModal').classList.add('hidden');
+      $('passwordForm').reset();
+      $('passwordError').textContent='';
+    }
+
+    async function changePassword(event){
+      event.preventDefault();
+      const currentPassword=$('currentPassword').value;
+      const newPassword=$('newPassword').value;
+      if(newPassword.length<6){
+        $('passwordError').textContent='新密码至少需要 6 位';
+        return;
+      }
+      if(newPassword!==$('confirmPassword').value){
+        $('passwordError').textContent='两次输入的新密码不一致';
+        return;
+      }
+      const button=$('passwordSaveBtn');
+      button.disabled=true;
+      $('passwordError').textContent='';
+      try{
+        const data=await api('/api/auth/password',{
+          method:'PUT',
+          body:JSON.stringify({currentPassword,newPassword}),
+        });
+        state.token=data.token;
+        localStorage.setItem('cursorBoardToken',state.token);
+        closePasswordModal();
+        connectSse();
+      }catch(error){
+        $('passwordError').textContent=error.message;
+      }finally{
+        button.disabled=false;
+      }
     }
 
     function modelName(modelId){
@@ -601,12 +1017,22 @@
     } = window.TaskDisplay;
 
     function renderTaskCard(task, options = {}) {
-      const { queueHead = false } = options;
+      const { queueHead = false, group = '' } = options;
       const archivedBadge = task.archived ? '<span class="badge">已归档</span>' : '';
+      const phaseChip = group === 'developing' && task.status !== 'developing'
+        ? `<span class="status-chip active">${escapeHtml(statusLabel(task.status))}</span>`
+        : '';
+      const waitChip = group === 'waiting'
+        ? `<span class="status-chip wait">${escapeHtml(statusLabel(task.status))}</span>`
+        : '';
+      const failChip = group === 'problem'
+        ? `<span class="status-chip fail">${escapeHtml(statusLabel(task.status))}</span>`
+        : '';
       return `
         <div class="card ${task.id === state.selectedId ? 'active' : ''}" data-task="${task.id}">
           <div class="card-title">${escapeHtml(task.title)}</div>
-          <div class="meta">${escapeHtml(templateName(task.template))} · ${escapeHtml(statusLabel(task.status))} · ${escapeHtml(modelName(task.model_id))}</div>
+          <div class="meta">${escapeHtml(templateName(task.template))} · ${escapeHtml(modelName(task.model_id))}</div>
+          ${phaseChip}${waitChip}${failChip}
           ${queueHead ? '<span class="badge queue-next">队首</span>' : ''}
           ${task.pipeline_mode ? '<span class="badge pipeline">流水线</span>' : ''}
           ${task.git_commit ? '<span class="badge">Git</span>' : ''}
@@ -765,11 +1191,64 @@
 
     function renderProjectWorkdirsEditor(){
       const machine=state.project?.type==='machine';
-      $('workdirsSection').classList.toggle('hidden',machine);
       if(machine)return;
       const workdirs=state.project?.workdirs?.length?state.project.workdirs:[{label:'',path:''}];
-      $('workdirsCount').textContent=String(state.project?.workdirs?.length||0);
       bindWorkdirList($('projectWorkdirsEditor'),workdirs);
+    }
+
+    function openProjectConfigModal(){
+      if(!state.project||state.project.type==='machine')return;
+      $('projectConfigError').textContent='';
+      renderProjectWorkdirsEditor();
+      $('deployCommandInput').value=state.project.deploy_command||'';
+      $('projectGitEnabledEditor').checked=Boolean(state.project.git_enabled);
+      $('projectGitPushEditor').checked=Boolean(state.project.git_push);
+      syncProjectGitEditorVisibility();
+      $('projectConfigModal').classList.remove('hidden');
+    }
+
+    function closeProjectConfigModal(){
+      $('projectConfigModal').classList.add('hidden');
+      $('projectConfigError').textContent='';
+    }
+
+    async function saveProjectConfig(event){
+      event?.preventDefault();
+      $('projectConfigError').textContent='';
+      const status=state.project?.deploy_status||'idle';
+      if(['deploying','fixing'].includes(status)){
+        $('projectConfigError').textContent='部署进行中，暂不可修改配置';
+        return;
+      }
+      $('projectConfigSaveBtn').disabled=true;
+      try{
+        state.project=await api(`/api/projects/${state.projectId}/workdirs`,{
+          method:'PATCH',
+          body:JSON.stringify({workdirs:collectWorkdirRows($('projectWorkdirsEditor'))})
+        });
+        state.project=await api(`/api/projects/${state.projectId}/deploy-command`,{
+          method:'PATCH',
+          body:JSON.stringify({deployCommand:$('deployCommandInput').value.trim()})
+        });
+        state.project=await api(`/api/projects/${state.projectId}/git`,{
+          method:'PATCH',
+          body:JSON.stringify({
+            gitEnabled:$('projectGitEnabledEditor').checked,
+            gitPush:$('projectGitPushEditor').checked,
+          })
+        });
+        state.rules=await api(`/api/projects/${state.projectId}/rules`);
+        $('projectPath').textContent=formatProjectWorkdirs(state.project);
+        renderTaskWorkdirOptions();
+        renderProjectDeploy();
+        renderGitCommitOptions();
+        renderRules();
+        closeProjectConfigModal();
+      }catch(error){
+        $('projectConfigError').textContent=error.message;
+      }finally{
+        $('projectConfigSaveBtn').disabled=false;
+      }
     }
 
     function renderTaskWorkdirOptions(){
@@ -848,6 +1327,20 @@
       }catch(error){$('projectError').textContent=error.message}
     }
 
+    function renderProblemSection() {
+      const section = $('boardProblems');
+      if (!section) return;
+      const tasks = sortTasksForGroup(
+        state.tasks.filter((task) => statusGroup(task.status) === 'problem'),
+        'problem',
+      );
+      section.classList.toggle('hidden', !tasks.length);
+      section.querySelector('.count').textContent = tasks.length;
+      section.querySelector('.cards').innerHTML = tasks
+        .map((task) => renderTaskCard(task, { group: 'problem' }))
+        .join('');
+    }
+
     function renderBoard(){
       document.querySelectorAll('.column').forEach(column=>{
         const group=column.dataset.group;
@@ -863,8 +1356,10 @@
         column.querySelector('.count').textContent=tasks.length;
         column.querySelector('.cards').innerHTML=tasks.map((task,index)=>renderTaskCard(task,{
           queueHead: group==='pending'&&index===tasks.length-1,
+          group,
         })).join('');
       });
+      renderProblemSection();
       document.querySelectorAll('[data-task]').forEach(card=>card.onclick=()=>selectTask(card.dataset.task));
       if(state.selectedId)renderDrawer();
     }
@@ -891,7 +1386,8 @@
 
     function renderProjectDeploy(){
       const machine=state.project.type==='machine';
-      $('projectDeployBar').classList.toggle('hidden',machine);
+      $('projectActionsBar').classList.toggle('hidden',machine);
+      $('projectConfigBtn').classList.toggle('hidden',machine);
       if(machine)return;
       const pending=state.tasks.filter(task=>task.status==='pending_deploy').length;
       const status=state.project.deploy_status||'idle';
@@ -901,7 +1397,6 @@
       syncProjectGitEditorVisibility();
       $('deployProjectBtn').textContent=`部署（${pending}）`;
       $('deployProjectBtn').disabled=!state.project.deploy_command||['deploying','fixing'].includes(status);
-      $('saveDeployCommandBtn').disabled=['deploying','fixing'].includes(status);
       const labels={
         idle:'未部署',deploying:'部署中…',success:'最近部署成功',
         awaiting_fix:'部署失败，等待确认修复',fixing:'Agent 修复中…',failed:'部署失败'
@@ -911,26 +1406,6 @@
       const awaiting=status==='awaiting_fix';
       $('approveDeployFixBtn').classList.toggle('hidden',!awaiting);
       $('rejectDeployFixBtn').classList.toggle('hidden',!awaiting);
-    }
-
-    async function saveProjectGit(){
-      state.project=await api(`/api/projects/${state.projectId}/git`,{
-        method:'PATCH',
-        body:JSON.stringify({
-          gitEnabled:$('projectGitEnabledEditor').checked,
-          gitPush:$('projectGitPushEditor').checked,
-        })
-      });
-      renderProjectDeploy();
-      renderGitCommitOptions();
-    }
-
-    async function saveDeployCommand(){
-      state.project=await api(`/api/projects/${state.projectId}/deploy-command`,{
-        method:'PATCH',
-        body:JSON.stringify({deployCommand:$('deployCommandInput').value.trim()})
-      });
-      renderProjectDeploy();
     }
 
     async function deployProject(){
@@ -974,21 +1449,6 @@
             <div class="markdown">${markdown(rule.content)}</div>
           </details>`).join(''):'<p class="muted">未发现 .cursor/rules/*.mdc</p>')+
         `</details>`;
-    }
-
-    async function saveProjectWorkdirs(){
-      $('workdirsError').textContent='';
-      try{
-        state.project=await api(`/api/projects/${state.projectId}/workdirs`,{
-          method:'PATCH',
-          body:JSON.stringify({workdirs:collectWorkdirRows($('projectWorkdirsEditor'))})
-        });
-        state.rules=await api(`/api/projects/${state.projectId}/rules`);
-        $('projectPath').textContent=formatProjectWorkdirs(state.project);
-        renderProjectWorkdirsEditor();
-        renderTaskWorkdirOptions();
-        renderRules();
-      }catch(error){$('workdirsError').textContent=error.message}
     }
 
     async function createTask(){
@@ -1213,7 +1673,9 @@
     window.respondPlan=respondPlan;window.respondQuestions=respondQuestions;
 
     function connectSse(){
+      state.eventSource?.close();
       const source=new EventSource(`/api/events?token=${encodeURIComponent(state.token)}`);
+      state.eventSource=source;
       source.onopen=()=>{$('connState').textContent='实时连接'};
       source.onerror=()=>{$('connState').textContent='连接中断'};
       ['task:created','task:status','task:interaction','task:archived'].forEach(name=>source.addEventListener(name,event=>{
@@ -1244,13 +1706,19 @@
       $('queueState').textContent=`并行 ${health.runningTaskIds.length}/${health.maxConcurrent}`;
     }
 
-    async function init(){
-      await bootstrap();connectSse();
+    async function startBoard(){
+      await bootstrap();
+      unlockBoard();
+      connectSse();
       if(state.projectId){
         $('homeView').classList.add('hidden');$('projectView').classList.remove('hidden');$('homeBtn').classList.remove('hidden');
         $('createTaskBtn').onclick=createTask;$('refreshBtn').onclick=loadProject;
-        $('saveDeployCommandBtn').onclick=saveDeployCommand;
-        $('saveProjectGitBtn').onclick=saveProjectGit;
+        $('projectConfigBtn').onclick=openProjectConfigModal;
+        $('projectConfigForm').onsubmit=saveProjectConfig;
+        $('projectConfigCancelBtn').onclick=closeProjectConfigModal;
+        $('projectConfigModal').onclick=(event)=>{
+          if(event.target===$('projectConfigModal'))closeProjectConfigModal();
+        };
         $('deployProjectBtn').onclick=deployProject;
         $('approveDeployFixBtn').onclick=()=>respondDeployRepair(true);
         $('rejectDeployFixBtn').onclick=()=>respondDeployRepair(false);
@@ -1267,7 +1735,6 @@
             [...collectWorkdirRows($('projectWorkdirsEditor')),{label:'',path:''}],
           );
         };
-        $('saveWorkdirsBtn').onclick=saveProjectWorkdirs;
         $('complexInput').onchange=()=>{if($('complexInput').checked)$('pipelineInput').checked=false;renderModelOptions();renderGitCommitOptions();updateTitlePreview();};
         $('pipelineInput').onchange=()=>{if($('pipelineInput').checked){$('complexInput').checked=false;$('complexInput').disabled=true}else{$('complexInput').disabled=false}renderModelOptions();renderGitCommitOptions();updateTitlePreview();};
         $('templateSelect').onchange=()=>{syncTemplateSelection();renderTemplateFields();renderGitCommitOptions();updateTitlePreview();};
@@ -1284,6 +1751,25 @@
         $('createProjectBtn').onclick=createProject;
         $('projectGitEnabled').onchange=syncProjectGitPushVisibility;
         await loadHome();
+      }
+    }
+
+    async function init(){
+      $('loginForm').onsubmit=submitLogin;
+      $('securityBtn').onclick=openPasswordModal;
+      $('passwordForm').onsubmit=changePassword;
+      $('passwordCancelBtn').onclick=closePasswordModal;
+      $('passwordModal').onclick=(event)=>{
+        if(event.target===$('passwordModal'))closePasswordModal();
+      };
+      if(!state.token){
+        showLogin();
+        return;
+      }
+      try{
+        await startBoard();
+      }catch(error){
+        if(error.status!==401)throw error;
       }
     }
     init().catch(error=>{document.body.insertAdjacentHTML('beforeend',`<div class="error">${escapeHtml(error.message)}</div>`)});

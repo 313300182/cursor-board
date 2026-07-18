@@ -1,0 +1,45 @@
+---
+description: Cursor Board UI 设计系统(深色 Linear 精密风)——构建或修改任何界面时遵循
+globs: public/**/*.{html,css,js},**/*.vue,**/*.tsx,**/*.jsx,**/*.css
+alwaysApply: false
+---
+
+# Cursor Board 设计系统 · 深色 Linear 精密风
+
+定位:AI 智能体指挥台。原则:排版和间距干活、颜色克制、状态色与品牌色分离、发丝级边框、克制动效。
+
+## 主题色(深色为主;浅色主题后续按同语义追加,勿硬编码 hex,统一走 CSS 变量)
+
+```css
+:root {
+  /* 表面:用明暗分层代替明显边框 */
+  --bg:#0D0F13; --surface:#14161B; --surface-2:#191C22; --surface-hover:#1E222A;
+  /* 文字 */
+  --text:#E6E8EB; --text-2:#9BA1AC; --text-3:#6B7280;
+  /* 品牌:强调色仅用于选中态/主按钮/焦点环 */
+  --accent:#6366F1; --accent-hover:#7C7FF2; --accent-subtle:rgba(99,102,241,.14);
+  --border:rgba(255,255,255,.06); --border-strong:rgba(255,255,255,.10);
+  /* 状态色:与强调色区隔,不要彩虹化 */
+  --st-queued:#FBBF24; --st-running:#60A5FA; --st-done:#34D399; --st-failed:#F87171; --st-complex:#C084FC;
+  --radius:6px; --radius-lg:8px;
+}
+```
+
+## 排版
+
+- 字体:UI 用 `Inter`;任务 ID / 时间 / 时长 / 日志用等宽字(`JetBrains Mono`, `ui-monospace`)+ `font-variant-numeric: tabular-nums`。
+- 正文基准 14px / 行高 1.5。字号层级:页面标题 20/600/-0.02em、面板 16/600、卡片标题 14/600、正文 14/400、标签按钮 13/500、列头 12/600 大写 +0.04em、meta(mono) 12/500、徽章 11/500。
+
+## 间距 / 形状 / 动效
+
+- 4px 栅格;卡片内边距 12px;列间距/内边距 12px/10px。
+- 圆角:卡片/按钮/输入 `var(--radius)`,面板/抽屉 `var(--radius-lg)`,胶囊 999px。
+- 边框用 `--border`(6%),优先靠表面明暗分层;看板区不用阴影,仅抽屉/弹窗用极轻阴影。
+- 过渡 150–220ms `ease-out`;必须尊重 `prefers-reduced-motion`。
+
+## 禁止
+
+- ❌ 用 emoji 当结构图标(用 SVG:Phosphor/Lucide)。
+- ❌ 强调色滥用到非交互元素;❌ 状态色当强调色。
+- ❌ 大圆角(>8px)、明显描边线框、重投影、渐变。
+- ❌ 逐屏硬编码 hex;一律用上面的 CSS 变量。

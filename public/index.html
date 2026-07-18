@@ -91,8 +91,12 @@
     h3{margin:0 0 12px;font-size:14px;font-weight:600}
     .toolbar{display:flex;gap:10px;align-items:center}
     .toolbar>*{width:auto}
-    .projects-layout{display:grid;grid-template-columns:1fr 330px;gap:18px}
-    .project-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+    .projects-layout{max-width:1200px}
+    .home-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px;flex-wrap:wrap}
+    .home-header h1{margin-bottom:6px}
+    .home-header .muted{margin:0}
+    .home-header button{flex-shrink:0}
+    .project-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
     .project-card{
       background:var(--surface);
       border:1px solid var(--border);
@@ -119,8 +123,10 @@
     .workdir-check:hover{background:var(--surface-hover)}
     .workdir-check input{margin:2px 0 0;flex-shrink:0;width:auto}
     .workdir-check .path{font-size:11px;color:var(--text-3);word-break:break-all;margin-top:2px;font-family:"JetBrains Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
-    .stats{display:flex;gap:12px;margin-top:14px;font-size:12px;color:var(--text-2)}
-    .stats b{font-size:17px;display:block;color:var(--text)}
+    .stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 8px;margin-top:14px}
+    .stat-item{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0;font-size:11px;color:var(--text-2)}
+    .stat-item b{font-size:17px;display:block;color:var(--text);line-height:1.2}
+    .stat-label{white-space:nowrap;line-height:1.2}
     .project-layout{display:grid;grid-template-columns:320px minmax(0,1fr);gap:14px;align-items:start}
     .board{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px;min-width:0}
     .board-problems{
@@ -469,7 +475,7 @@
     @media(max-width:640px){.board{grid-template-columns:1fr}}
     #logBox{min-height:120px}
     .error{color:var(--st-failed);font-size:13px;margin-top:8px}
-    @media(max-width:1250px){.project-layout{grid-template-columns:1fr}.projects-layout{grid-template-columns:1fr}}
+    @media(max-width:1250px){.project-layout{grid-template-columns:1fr}}
     @media(max-width:760px){
       .modal-panel.rules-modal-panel,
       .modal-panel.task-detail-panel{width:min(100%,calc(100vw - 24px));max-height:92vh}
@@ -503,29 +509,14 @@
 
   <div class="container">
     <section id="homeView" class="projects-layout">
-      <div>
-        <h1>项目</h1>
-        <p class="muted">每个项目拥有独立串行队列，不同项目可并行执行。</p>
-        <div id="projectGrid" class="project-grid"></div>
+      <div class="home-header">
+        <div>
+          <h1>项目</h1>
+          <p class="muted">每个项目拥有独立串行队列，不同项目可并行执行。</p>
+        </div>
+        <button type="button" id="openCreateProjectBtn" class="primary">新增项目</button>
       </div>
-      <aside class="panel">
-        <h2>添加项目</h2>
-        <label>项目名称</label><input id="projectName" placeholder="例如：订单服务" />
-        <label>工作目录</label>
-        <div id="projectWorkdirs" class="workdir-list"></div>
-        <button type="button" id="addProjectWorkdirBtn" style="width:100%;margin-top:8px">添加目录</button>
-        <label>部署命令 <span class="muted">(可选)</span></label><input id="projectDeployCommand" placeholder="例如：npm run deploy" />
-        <div class="switch-row">
-          <div><strong>Git 关联</strong><div class="muted" style="font-size:11px">启用后流水线任务可提交代码</div></div>
-          <label class="switch"><input id="projectGitEnabled" type="checkbox"><span class="slider"></span></label>
-        </div>
-        <div id="projectGitPushRow" class="switch-row hidden">
-          <div><strong>提交后推送</strong><div class="muted" style="font-size:11px">Git 提交成功后自动 push</div></div>
-          <label class="switch"><input id="projectGitPush" type="checkbox"><span class="slider"></span></label>
-        </div>
-        <button id="createProjectBtn" class="primary" style="width:100%;margin-top:14px">创建项目</button>
-        <div id="projectError" class="error"></div>
-      </aside>
+      <div id="projectGrid" class="project-grid"></div>
     </section>
 
     <section id="projectView" class="project-layout hidden">
@@ -620,6 +611,31 @@
         <button type="button" id="skillsModalCloseBtn">关闭</button>
       </div>
     </div>
+  </div>
+
+  <div id="createProjectModal" class="modal-backdrop hidden">
+    <form id="createProjectForm" class="modal-panel modal-wide" role="dialog" aria-labelledby="createProjectTitle">
+      <h3 id="createProjectTitle">添加项目</h3>
+      <p class="muted">创建后可在项目看板中提交任务，工作目录可在项目配置中继续调整。</p>
+      <label for="projectName">项目名称</label><input id="projectName" placeholder="例如：订单服务" />
+      <label>工作目录</label>
+      <div id="projectWorkdirs" class="workdir-list"></div>
+      <button type="button" id="addProjectWorkdirBtn" style="width:100%;margin-top:8px">添加目录</button>
+      <label for="projectDeployCommand">部署命令 <span class="muted">(可选)</span></label><input id="projectDeployCommand" placeholder="例如：npm run deploy" />
+      <div class="switch-row">
+        <div><strong>Git 关联</strong><div class="muted" style="font-size:11px">启用后流水线任务可提交代码</div></div>
+        <label class="switch"><input id="projectGitEnabled" type="checkbox"><span class="slider"></span></label>
+      </div>
+      <div id="projectGitPushRow" class="switch-row hidden">
+        <div><strong>提交后推送</strong><div class="muted" style="font-size:11px">Git 提交成功后自动 push</div></div>
+        <label class="switch"><input id="projectGitPush" type="checkbox"><span class="slider"></span></label>
+      </div>
+      <div id="projectError" class="error"></div>
+      <div class="modal-actions">
+        <button type="button" id="createProjectCancelBtn">取消</button>
+        <button type="submit" id="createProjectBtn" class="primary">创建项目</button>
+      </div>
+    </form>
   </div>
 
   <div id="projectConfigModal" class="modal-backdrop hidden">
@@ -1402,12 +1418,12 @@
           <h2>${escapeHtml(project.name)} ${project.type==='machine'?'<span class="badge">系统</span>':''}</h2>
           <div class="path">${escapeHtml(formatProjectWorkdirs(project))}</div>
           <div class="stats">
-            <span><b>${project.counts.pending||0}</b>待执行</span>
-            <span><b>${(project.counts.developing||0)+(project.counts.running||0)+(project.counts.planning||0)}</b>运行中</span>
-            <span><b>${project.counts.testing||0}</b>测试中</span>
-            <span><b>${project.counts.committing||0}</b>提交中</span>
-            <span><b>${(project.counts.pending_deploy||0)+(project.counts.deploying||0)}</b>待部署</span>
-            <span><b>${(project.counts.awaiting_input||0)+(project.counts.pending_approval||0)}</b>待确认</span>
+            <span class="stat-item"><b>${project.counts.pending||0}</b><span class="stat-label">待执行</span></span>
+            <span class="stat-item"><b>${(project.counts.developing||0)+(project.counts.running||0)+(project.counts.planning||0)}</b><span class="stat-label">运行中</span></span>
+            <span class="stat-item"><b>${project.counts.testing||0}</b><span class="stat-label">测试中</span></span>
+            <span class="stat-item"><b>${project.counts.committing||0}</b><span class="stat-label">提交中</span></span>
+            <span class="stat-item"><b>${(project.counts.pending_deploy||0)+(project.counts.deploying||0)}</b><span class="stat-label">待部署</span></span>
+            <span class="stat-item"><b>${(project.counts.awaiting_input||0)+(project.counts.pending_approval||0)}</b><span class="stat-label">待确认</span></span>
           </div>
         </a>`).join('');
     }
@@ -1431,8 +1447,29 @@
       if(!enabled&&$('projectGitPushEditor'))$('projectGitPushEditor').checked=false;
     }
 
-    async function createProject(){
+    function openCreateProjectModal(){
       $('projectError').textContent='';
+      renderCreateProjectWorkdirs();
+      $('createProjectModal').classList.remove('hidden');
+      $('projectName').focus();
+    }
+
+    function closeCreateProjectModal(){
+      $('createProjectModal').classList.add('hidden');
+      $('projectError').textContent='';
+      $('projectName').value='';
+      $('projectDeployCommand').value='';
+      $('projectGitEnabled').checked=false;
+      $('projectGitPush').checked=false;
+      syncProjectGitPushVisibility();
+      renderCreateProjectWorkdirs();
+    }
+
+    async function createProject(event){
+      event?.preventDefault();
+      $('projectError').textContent='';
+      const button=$('createProjectBtn');
+      button.disabled=true;
       try{
         await api('/api/projects',{method:'POST',body:JSON.stringify({
           name:$('projectName').value.trim(),
@@ -1441,13 +1478,10 @@
           gitEnabled:$('projectGitEnabled').checked,
           gitPush:$('projectGitPush').checked,
         })});
-        $('projectName').value='';$('projectDeployCommand').value='';
-        $('projectGitEnabled').checked=false;
-        $('projectGitPush').checked=false;
-        syncProjectGitPushVisibility();
-        renderCreateProjectWorkdirs();
+        closeCreateProjectModal();
         await loadHome();
       }catch(error){$('projectError').textContent=error.message}
+      finally{button.disabled=false}
     }
 
     function renderProblemSection() {
@@ -2075,6 +2109,12 @@
         $('projectGitEnabledEditor').onchange=syncProjectGitEditorVisibility;
         await loadProject();
       }else{
+        $('openCreateProjectBtn').onclick=openCreateProjectModal;
+        $('createProjectForm').onsubmit=createProject;
+        $('createProjectCancelBtn').onclick=closeCreateProjectModal;
+        $('createProjectModal').onclick=(event)=>{
+          if(event.target===$('createProjectModal'))closeCreateProjectModal();
+        };
         renderCreateProjectWorkdirs();
         $('addProjectWorkdirBtn').onclick=()=>{
           bindWorkdirList(
@@ -2082,7 +2122,6 @@
             [...collectWorkdirRows($('projectWorkdirs')),{label:'',path:''}],
           );
         };
-        $('createProjectBtn').onclick=createProject;
         $('projectGitEnabled').onchange=syncProjectGitPushVisibility;
         await loadHome();
       }

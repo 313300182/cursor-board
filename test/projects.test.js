@@ -100,6 +100,62 @@ test('normalizeWorkdirs 会去重并忽略空路径', () => {
   ]), [{ label: '后端', path: 'D:/code/api' }]);
 });
 
+test('普通项目可配置 Git 关联', () => {
+  const { db, projects } = createMemoryRepos();
+  const project = projects.createProject({
+    id: 'git-app',
+    name: 'Git App',
+    type: 'normal',
+    workdir: 'D:\\code\\git-app',
+    git_enabled: true,
+    git_push: true,
+    created_at: new Date().toISOString(),
+  });
+
+  assert.equal(project.git_enabled, true);
+  assert.equal(project.git_push, true);
+
+  const updated = projects.updateProjectGit(project.id, {
+    gitEnabled: true,
+    gitPush: false,
+  });
+  assert.equal(updated.git_push, false);
+
+  projects.ensureMachineProject();
+  assert.throws(() => projects.updateProjectGit('machine', { gitEnabled: true }), /不支持 Git/);
+  db.close();
+});
+
+test('任务可标记需要 Git 提交', () => {
+  const { db, projects, tasks } = createMemoryRepos();
+  const project = projects.createProject({
+    id: 'git-app',
+    name: 'Git App',
+    type: 'normal',
+    workdir: 'D:\\code\\git-app',
+    git_enabled: true,
+    created_at: new Date().toISOString(),
+  });
+
+  tasks.createTask({
+    id: 'task-git',
+    project_id: project.id,
+    title: '提交任务',
+    template: 'feature',
+    variables: {},
+    workdir: project.workdir,
+    status: 'pending',
+    is_complex: 0,
+    pipeline_mode: 1,
+    git_commit: 1,
+    prompt_rendered: 'test',
+    created_at: new Date().toISOString(),
+  });
+
+  assert.equal(tasks.getTask('task-git').git_commit, true);
+  db.close();
+});
+
 test('已完成任务可归档且默认列表不再返回', () => {
   const { db, projects, tasks } = createMemoryRepos();
   const project = projects.createProject({

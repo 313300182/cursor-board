@@ -31,6 +31,10 @@
     .workdirs-section summary{cursor:pointer;font-weight:600;padding:9px 11px;font-size:13px;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:8px}
     .workdirs-section summary::-webkit-details-marker{display:none}
     .workdirs-section .body{padding:0 10px 10px}
+    .workdir-check-list{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+    .workdir-check{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--panel2);cursor:pointer;font-size:13px;line-height:1.4}
+    .workdir-check input{margin:2px 0 0;flex-shrink:0;width:auto}
+    .workdir-check .path{font-size:11px;color:var(--muted);word-break:break-all;margin-top:2px}
     .stats{display:flex;gap:12px;margin-top:14px;font-size:12px}.stats b{font-size:17px;display:block}
     .project-layout{display:grid;grid-template-columns:360px minmax(0,1fr);gap:14px;align-items:start}
     .board{display:grid;grid-template-columns:repeat(9,minmax(120px,1fr));gap:9px;overflow-x:auto}
@@ -115,6 +119,11 @@
     .modal-panel .muted{margin-bottom:12px;font-size:12px}
     .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
     .interaction{border:1px solid var(--orange);background:#231d10;border-radius:9px;padding:12px;margin-top:12px}.option{display:flex;gap:8px;align-items:center;margin:7px 0}.option input{width:auto}
+    .steer-panel{border:1px solid var(--accent);background:#121b2a;border-radius:9px;padding:12px;display:flex;flex-direction:column;gap:8px}
+    .steer-panel h3{margin:0;font-size:13px;color:var(--muted)}
+    .steer-panel textarea{min-height:72px;font-size:12px}
+    .steer-panel .toolbar{margin:0;flex-wrap:wrap}
+    .steer-panel .toolbar button{font-size:12px;padding:7px 10px}
     .project-deploy{display:flex;align-items:flex-end;gap:8px;padding:10px;margin-bottom:12px;border:1px solid var(--border);border-radius:9px;background:var(--panel2)}
     .project-deploy .command{flex:1}.project-deploy label{margin:0 0 5px}.project-deploy .status{min-width:120px;font-size:12px;color:var(--muted)}
     .project-deploy button{white-space:nowrap}
@@ -146,6 +155,14 @@
         <div id="projectWorkdirs" class="workdir-list"></div>
         <button type="button" id="addProjectWorkdirBtn" style="width:100%;margin-top:8px">添加目录</button>
         <label>部署命令 <span class="muted">(可选)</span></label><input id="projectDeployCommand" placeholder="例如：npm run deploy" />
+        <div class="switch-row">
+          <div><strong>Git 关联</strong><div class="muted" style="font-size:11px">启用后流水线任务可提交代码</div></div>
+          <label class="switch"><input id="projectGitEnabled" type="checkbox"><span class="slider"></span></label>
+        </div>
+        <div id="projectGitPushRow" class="switch-row hidden">
+          <div><strong>提交后推送</strong><div class="muted" style="font-size:11px">Git 提交成功后自动 push</div></div>
+          <label class="switch"><input id="projectGitPush" type="checkbox"><span class="slider"></span></label>
+        </div>
         <button id="createProjectBtn" class="primary" style="width:100%;margin-top:14px">创建项目</button>
         <div id="projectError" class="error"></div>
       </aside>
@@ -163,7 +180,7 @@
           <input id="titleInput" placeholder="复杂任务建议填写标题" />
         </div>
         <div id="workdirGroup"><label>工作目录</label><input id="workdirInput" placeholder="本机任务必须指定目录" /></div>
-        <div id="taskWorkdirGroup" class="hidden"><label>工作目录</label><select id="taskWorkdirSelect"></select></div>
+        <div id="taskWorkdirGroup" class="hidden"><label>工作目录 <span class="muted">(可多选，适合前后端联动)</span></label><div id="taskWorkdirChecks" class="workdir-check-list"></div></div>
         <div id="variableFields" class="variable-fields"></div>
         <details id="templateSection" class="template-section">
           <summary>任务类型 · <span id="templateSummary" class="muted">通用</span></summary>
@@ -171,8 +188,12 @@
           <div id="templatePicker" class="template-picker-body"></div>
         </details>
         <div class="switch-row">
-          <div><strong>流水线</strong><div class="muted" style="font-size:11px">开发 → 测试 → 等待项目部署</div></div>
+          <div><strong>流水线</strong><div class="muted" style="font-size:11px">开发 → 测试 → Git 提交 → 等待项目部署</div></div>
           <label class="switch"><input id="pipelineInput" type="checkbox"><span class="slider"></span></label>
+        </div>
+        <div id="gitCommitRow" class="switch-row hidden">
+          <div><strong>提交 Git</strong><div class="muted" style="font-size:11px">测试通过后自动 commit（可选 push）</div></div>
+          <label class="switch"><input id="gitCommitInput" type="checkbox"><span class="slider"></span></label>
         </div>
         <div class="switch-row">
           <div><strong>复杂任务</strong><div class="muted" style="font-size:11px">开启后先 Plan，再确认执行</div></div>
@@ -203,7 +224,19 @@
             <label>项目部署命令</label>
             <input id="deployCommandInput" placeholder="例如：npm run deploy" />
           </div>
+          <div class="command" style="min-width:140px">
+            <label>Git</label>
+            <div style="display:flex;gap:10px;align-items:center;height:38px">
+              <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:12px">
+                <input id="projectGitEnabledEditor" type="checkbox" />启用
+              </label>
+              <label id="projectGitPushEditorWrap" style="margin:0;display:flex;align-items:center;gap:6px;font-size:12px" class="hidden">
+                <input id="projectGitPushEditor" type="checkbox" />推送
+              </label>
+            </div>
+          </div>
           <button id="saveDeployCommandBtn">保存命令</button>
+          <button id="saveProjectGitBtn">保存 Git</button>
           <button id="deployProjectBtn" class="primary">部署（0）</button>
           <div id="deployProjectStatus" class="status"></div>
           <button id="approveDeployFixBtn" class="hidden">批准 Agent 修复</button>
@@ -215,6 +248,7 @@
           <div class="column" data-group="waiting"><h3>待确认 <span class="count"></span></h3><div class="cards"></div></div>
           <div class="column" data-group="developing"><h3>开发中 <span class="count"></span></h3><div class="cards"></div></div>
           <div class="column" data-group="testing"><h3>测试中 <span class="count"></span></h3><div class="cards"></div></div>
+          <div class="column" data-group="committing"><h3>提交中 <span class="count"></span></h3><div class="cards"></div></div>
           <div class="column" data-group="running"><h3>执行中 <span class="count"></span></h3><div class="cards"></div></div>
           <div class="column" data-group="deploy"><h3>待部署 <span class="count"></span></h3><div class="cards"></div></div>
           <div class="column" data-group="done"><h3><span>已完成 <span class="count"></span></span><span class="column-actions"></span></h3><div class="cards"></div><div class="column-footer"></div></div>
@@ -536,6 +570,7 @@
       $('complexInput').checked=false;
       $('complexInput').disabled=false;
       $('pipelineInput').checked=false;
+      $('gitCommitInput').checked=false;
       state.fieldImages={};
       if(state.templates.length)$('templateSelect').value=defaultTemplateId();
       renderModelOptions();
@@ -547,7 +582,7 @@
     function statusLabel(status){
       const labels={
         pending:'待执行',planning:'规划中',running:'执行中',developing:'开发中',testing:'测试中',
-        pending_deploy:'待部署',deploying:'部署中',awaiting_input:'待回答',pending_approval:'待批准',
+        committing:'提交中',pending_deploy:'待部署',deploying:'部署中',awaiting_input:'待回答',pending_approval:'待批准',
         done:'已完成',failed:'失败',needs_human:'需人工'
       };
       return labels[status]||status;
@@ -562,6 +597,7 @@
       resolveTaskSummary,
       limitDoneTasksForDisplay,
       renderLogChunksHtml,
+      isActiveTaskStatus,
     } = window.TaskDisplay;
 
     function renderTaskCard(task, options = {}) {
@@ -573,6 +609,7 @@
           <div class="meta">${escapeHtml(templateName(task.template))} · ${escapeHtml(statusLabel(task.status))} · ${escapeHtml(modelName(task.model_id))}</div>
           ${queueHead ? '<span class="badge queue-next">队首</span>' : ''}
           ${task.pipeline_mode ? '<span class="badge pipeline">流水线</span>' : ''}
+          ${task.git_commit ? '<span class="badge">Git</span>' : ''}
           ${task.is_complex ? '<span class="badge complex">复杂</span>' : ''}
           ${archivedBadge}
         </div>`;
@@ -676,6 +713,14 @@
       return workdirs.map(entry=>entry.label?`${entry.label}: ${entry.path}`:entry.path).join('\n');
     }
 
+    function formatTaskWorkdirs(task){
+      const workdirs=task?.workdirs||[];
+      if(workdirs.length>1){
+        return workdirs.map(entry=>entry.label?`${entry.label}: ${entry.path}`:entry.path).join(' · ');
+      }
+      return task?.workdir||'';
+    }
+
     function workdirOptionLabel(entry){
       return entry.label?`${entry.label} · ${entry.path}`:entry.path;
     }
@@ -733,8 +778,19 @@
       $('workdirGroup').classList.toggle('hidden',!machine);
       $('taskWorkdirGroup').classList.toggle('hidden',machine||workdirs.length<=1);
       if(machine||workdirs.length<=1)return;
-      $('taskWorkdirSelect').innerHTML=workdirs.map(entry=>`
-        <option value="${escapeHtml(entry.path)}">${escapeHtml(workdirOptionLabel(entry))}</option>`).join('');
+      $('taskWorkdirChecks').innerHTML=workdirs.map(entry=>`
+        <label class="workdir-check">
+          <input type="checkbox" value="${escapeHtml(entry.path)}" checked />
+          <span>
+            <div>${escapeHtml(entry.label||entry.path)}</div>
+            ${entry.label?`<div class="path">${escapeHtml(entry.path)}</div>`:''}
+          </span>
+        </label>`).join('');
+    }
+
+    function collectTaskWorkdirs(){
+      return Array.from($('taskWorkdirChecks').querySelectorAll('input[type="checkbox"]:checked'))
+        .map(input=>input.value);
     }
 
     async function loadHome(){
@@ -747,10 +803,30 @@
             <span><b>${project.counts.pending||0}</b>待执行</span>
             <span><b>${(project.counts.developing||0)+(project.counts.running||0)+(project.counts.planning||0)}</b>运行中</span>
             <span><b>${project.counts.testing||0}</b>测试中</span>
+            <span><b>${project.counts.committing||0}</b>提交中</span>
             <span><b>${(project.counts.pending_deploy||0)+(project.counts.deploying||0)}</b>待部署</span>
             <span><b>${(project.counts.awaiting_input||0)+(project.counts.pending_approval||0)}</b>待确认</span>
           </div>
         </a>`).join('');
+    }
+
+    function syncProjectGitPushVisibility(){
+      const enabled=$('projectGitEnabled')?.checked;
+      $('projectGitPushRow')?.classList.toggle('hidden',!enabled);
+      if(!enabled&&$('projectGitPush'))$('projectGitPush').checked=false;
+    }
+
+    function renderGitCommitOptions(){
+      const enabled=Boolean(state.project?.git_enabled);
+      const pipeline=$('pipelineInput')?.checked||Boolean(selectedTemplate()?.pipeline||selectedTemplate()?.category==='开发');
+      $('gitCommitRow')?.classList.toggle('hidden',!enabled||!pipeline);
+      if(!enabled||!pipeline)$('gitCommitInput').checked=false;
+    }
+
+    function syncProjectGitEditorVisibility(){
+      const enabled=$('projectGitEnabledEditor')?.checked;
+      $('projectGitPushEditorWrap')?.classList.toggle('hidden',!enabled);
+      if(!enabled&&$('projectGitPushEditor'))$('projectGitPushEditor').checked=false;
     }
 
     async function createProject(){
@@ -759,9 +835,14 @@
         await api('/api/projects',{method:'POST',body:JSON.stringify({
           name:$('projectName').value.trim(),
           workdirs:collectWorkdirRows($('projectWorkdirs')),
-          deployCommand:$('projectDeployCommand').value.trim()
+          deployCommand:$('projectDeployCommand').value.trim(),
+          gitEnabled:$('projectGitEnabled').checked,
+          gitPush:$('projectGitPush').checked,
         })});
         $('projectName').value='';$('projectDeployCommand').value='';
+        $('projectGitEnabled').checked=false;
+        $('projectGitPush').checked=false;
+        syncProjectGitPushVisibility();
         renderCreateProjectWorkdirs();
         await loadHome();
       }catch(error){$('projectError').textContent=error.message}
@@ -801,6 +882,7 @@
       renderTaskWorkdirOptions();
       renderProjectWorkdirsEditor();
       renderProjectDeploy();
+      renderGitCommitOptions();
       renderTemplateOptions();
       renderTemplateFields();
       renderModelOptions();
@@ -814,8 +896,11 @@
       const pending=state.tasks.filter(task=>task.status==='pending_deploy').length;
       const status=state.project.deploy_status||'idle';
       $('deployCommandInput').value=state.project.deploy_command||'';
+      $('projectGitEnabledEditor').checked=Boolean(state.project.git_enabled);
+      $('projectGitPushEditor').checked=Boolean(state.project.git_push);
+      syncProjectGitEditorVisibility();
       $('deployProjectBtn').textContent=`部署（${pending}）`;
-      $('deployProjectBtn').disabled=!pending||!state.project.deploy_command||['deploying','fixing'].includes(status);
+      $('deployProjectBtn').disabled=!state.project.deploy_command||['deploying','fixing'].includes(status);
       $('saveDeployCommandBtn').disabled=['deploying','fixing'].includes(status);
       const labels={
         idle:'未部署',deploying:'部署中…',success:'最近部署成功',
@@ -826,6 +911,18 @@
       const awaiting=status==='awaiting_fix';
       $('approveDeployFixBtn').classList.toggle('hidden',!awaiting);
       $('rejectDeployFixBtn').classList.toggle('hidden',!awaiting);
+    }
+
+    async function saveProjectGit(){
+      state.project=await api(`/api/projects/${state.projectId}/git`,{
+        method:'PATCH',
+        body:JSON.stringify({
+          gitEnabled:$('projectGitEnabledEditor').checked,
+          gitPush:$('projectGitPushEditor').checked,
+        })
+      });
+      renderProjectDeploy();
+      renderGitCommitOptions();
     }
 
     async function saveDeployCommand(){
@@ -898,20 +995,23 @@
       $('taskError').textContent='';
       try{
         const workdirs=state.project?.workdirs||[];
-        const taskWorkdir=state.project.type==='machine'
-          ?$('workdirInput').value.trim()
-          :(workdirs.length>1?$('taskWorkdirSelect').value:null);
-        await api('/api/tasks',{method:'POST',body:JSON.stringify({
+        const payload={
           projectId:state.projectId,
           title:$('complexInput').checked&&!$('pipelineInput').checked?$('titleInput').value.trim():'',
           template:$('templateSelect').value,
-          workdir:taskWorkdir,
           isComplex:$('complexInput').checked&&!$('pipelineInput').checked,
           pipelineMode:$('pipelineInput').checked||Boolean(selectedTemplate()?.pipeline||selectedTemplate()?.category==='开发'),
+          gitCommit:$('gitCommitInput').checked,
           modelId:$('modelSelect').value||null,
           variables:collectVariables(),
           attachments:collectAttachments()
-        })});
+        };
+        if(state.project.type==='machine'){
+          payload.workdir=$('workdirInput').value.trim();
+        }else if(workdirs.length>1){
+          payload.workdirs=collectTaskWorkdirs();
+        }
+        await api('/api/tasks',{method:'POST',body:JSON.stringify(payload)});
         resetTaskForm();
         await refreshTasks();
       }catch(error){$('taskError').textContent=error.message}
@@ -963,6 +1063,22 @@
       </div>`;
     }
 
+    function renderSteerPanel(task){
+      if(!isActiveTaskStatus(task.status))return '';
+      return `
+        <div class="steer-panel">
+          <h3>执行中对话</h3>
+          <p class="muted" style="margin:0;font-size:11px">发现执行偏差时可补充说明；消息会在当前步骤完成后注入，或尝试中断当前步骤。</p>
+          <textarea id="steerMessage" placeholder="例如：这里改错了，应该用 Redis 而不是内存缓存；或者：跳过 mvn test"></textarea>
+          <div class="toolbar">
+            <button type="button" class="primary" id="sendSteerBtn">发送说明</button>
+            ${task.pipeline_mode?'<button type="button" id="skipTestBtn">跳过测试</button>':''}
+            <button type="button" class="danger" id="cancelTaskBtn">终止任务</button>
+          </div>
+          <div id="steerError" class="error"></div>
+        </div>`;
+    }
+
     function renderDrawer(){
       const task=state.tasks.find(item=>item.id===state.selectedId)
         ||state.archivedTasks.find(item=>item.id===state.selectedId);
@@ -971,8 +1087,9 @@
         return;
       }
       $('drawerTitle').textContent=task.title;
-      $('drawerMeta').textContent=`${statusLabel(task.status)} · ${modelName(task.model_id)}${task.pipeline_phase?` · ${task.pipeline_phase}`:''}`;
+      $('drawerMeta').textContent=`${statusLabel(task.status)} · ${modelName(task.model_id)}${task.pipeline_phase?` · ${task.pipeline_phase}`:''}${formatTaskWorkdirs(task)?` · ${formatTaskWorkdirs(task)}`:''}`;
       $('drawerDetail').innerHTML=`
+        ${renderSteerPanel(task)}
         ${renderInteraction(task)}
         ${task.error_message?`<div class="error">${escapeHtml(task.error_message)}</div>`:''}
         ${['failed','needs_human'].includes(task.status)?'<button id="retryBtn">重新入队</button>':''}
@@ -986,6 +1103,57 @@
       if(iterateBtn)iterateBtn.onclick=()=>openIterateModal(task.id);
       const archiveBtn=$('archiveBtn');
       if(archiveBtn)archiveBtn.onclick=async()=>{await archiveTasks([task.id])};
+      const sendSteerBtn=$('sendSteerBtn');
+      if(sendSteerBtn)sendSteerBtn.onclick=()=>submitSteerMessage(task.id,false);
+      const skipTestBtn=$('skipTestBtn');
+      if(skipTestBtn)skipTestBtn.onclick=()=>submitSteerMessage(task.id,true);
+      const cancelTaskBtn=$('cancelTaskBtn');
+      if(cancelTaskBtn)cancelTaskBtn.onclick=()=>cancelRunningTask(task.id);
+    }
+
+    async function submitSteerMessage(taskId,skipTest){
+      const steerError=$('steerError');
+      if(steerError)steerError.textContent='';
+      const message=$('steerMessage')?.value.trim()||'';
+      if(!skipTest&&!message){
+        if(steerError)steerError.textContent='请填写说明内容';
+        return;
+      }
+      const sendBtn=$('sendSteerBtn');
+      const skipBtn=$('skipTestBtn');
+      if(sendBtn)sendBtn.disabled=true;
+      if(skipBtn)skipBtn.disabled=true;
+      try{
+        await api(`/api/tasks/${taskId}/message`,{
+          method:'POST',
+          body:JSON.stringify({
+            message:skipTest&&!message?'跳过测试阶段，直接进入待部署':message,
+            skipTest,
+          }),
+        });
+        if($('steerMessage'))$('steerMessage').value='';
+        await refreshTasks();
+      }catch(error){
+        if(steerError)steerError.textContent=error.message;
+      }finally{
+        if(sendBtn)sendBtn.disabled=false;
+        if(skipBtn)skipBtn.disabled=false;
+      }
+    }
+
+    async function cancelRunningTask(taskId){
+      if(!window.confirm('确定终止该任务？Agent 进程将被停止。'))return;
+      const steerError=$('steerError');
+      if(steerError)steerError.textContent='';
+      const cancelBtn=$('cancelTaskBtn');
+      if(cancelBtn)cancelBtn.disabled=true;
+      try{
+        await api(`/api/tasks/${taskId}/cancel`,{method:'POST'});
+        await refreshTasks();
+      }catch(error){
+        if(steerError)steerError.textContent=error.message;
+        if(cancelBtn)cancelBtn.disabled=false;
+      }
     }
 
     function openIterateModal(taskId){
@@ -1082,6 +1250,7 @@
         $('homeView').classList.add('hidden');$('projectView').classList.remove('hidden');$('homeBtn').classList.remove('hidden');
         $('createTaskBtn').onclick=createTask;$('refreshBtn').onclick=loadProject;
         $('saveDeployCommandBtn').onclick=saveDeployCommand;
+        $('saveProjectGitBtn').onclick=saveProjectGit;
         $('deployProjectBtn').onclick=deployProject;
         $('approveDeployFixBtn').onclick=()=>respondDeployRepair(true);
         $('rejectDeployFixBtn').onclick=()=>respondDeployRepair(false);
@@ -1099,9 +1268,10 @@
           );
         };
         $('saveWorkdirsBtn').onclick=saveProjectWorkdirs;
-        $('complexInput').onchange=()=>{if($('complexInput').checked)$('pipelineInput').checked=false;renderModelOptions();updateTitlePreview();};
-        $('pipelineInput').onchange=()=>{if($('pipelineInput').checked){$('complexInput').checked=false;$('complexInput').disabled=true}else{$('complexInput').disabled=false}renderModelOptions();updateTitlePreview();};
-        $('templateSelect').onchange=()=>{syncTemplateSelection();renderTemplateFields();updateTitlePreview();};
+        $('complexInput').onchange=()=>{if($('complexInput').checked)$('pipelineInput').checked=false;renderModelOptions();renderGitCommitOptions();updateTitlePreview();};
+        $('pipelineInput').onchange=()=>{if($('pipelineInput').checked){$('complexInput').checked=false;$('complexInput').disabled=true}else{$('complexInput').disabled=false}renderModelOptions();renderGitCommitOptions();updateTitlePreview();};
+        $('templateSelect').onchange=()=>{syncTemplateSelection();renderTemplateFields();renderGitCommitOptions();updateTitlePreview();};
+        $('projectGitEnabledEditor').onchange=syncProjectGitEditorVisibility;
         await loadProject();
       }else{
         renderCreateProjectWorkdirs();
@@ -1111,7 +1281,9 @@
             [...collectWorkdirRows($('projectWorkdirs')),{label:'',path:''}],
           );
         };
-        $('createProjectBtn').onclick=createProject;await loadHome();
+        $('createProjectBtn').onclick=createProject;
+        $('projectGitEnabled').onchange=syncProjectGitPushVisibility;
+        await loadHome();
       }
     }
     init().catch(error=>{document.body.insertAdjacentHTML('beforeend',`<div class="error">${escapeHtml(error.message)}</div>`)});

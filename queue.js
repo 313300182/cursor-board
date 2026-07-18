@@ -2,12 +2,14 @@ const { v4: uuidv4 } = require('uuid');
 const fs = require('fs');
 const AcpRunner = require('./acp-runner');
 const ProjectScheduler = require('./scheduler');
+const { normalizeWorkdirs } = require('./db');
 const {
   getTemplate,
   renderTemplate,
   validateVariables,
   isPipelineTemplate,
   deriveTaskTitle,
+  buildWorkdirTemplateContext,
 } = require('./templates');
 const { resolveTaskModel } = require('./model-config');
 const { statusForPhase } = require('./pipeline');
@@ -69,43 +71,77 @@ class TaskQueue {
     });
   }
 
-  resolveTaskWorkdir(project, inputWorkdir) {
+  resolveTaskWorkdirs(project, input = {}) {
     if (project.type === 'machine') {
-      return String(inputWorkdir || '').trim() || null;
+      const fromArray = normalizeWorkdirs(input.workdirs || []);
+      if (fromArray.length) return fromArray;
+      const single = String(input.workdir || '').trim();
+      return single ? [{ label: '', path: single }] : [];
     }
-    const workdirs = project.workdirs || [];
-    if (!workdirs.length) {
-      return project.workdir || null;
+
+    const projectWorkdirs = project.workdirs || [];
+    if (!projectWorkdirs.length) {
+      const fallback = project.workdir;
+      return fallback ? [{ label: '', path: fallback }] : [];
     }
-    if (workdirs.length === 1) {
-      return workdirs[0].path;
+    if (projectWorkdirs.length === 1) {
+      return projectWorkdirs;
     }
-    const selected = String(inputWorkdir || '').trim();
-    if (!selected) throw new Error('请选择工作目录');
-    const match = workdirs.find(
-      (entry) => entry.path.replace(/\//g, '\\').toLowerCase()
-        === selected.replace(/\//g, '\\').toLowerCase(),
-    );
-    if (!match) throw new Error('所选工作目录不属于当前项目');
-    return match.path;
+
+    const selectedPaths = [];
+    if (Array.isArray(input.workdirs) && input.workdirs.length) {
+      for (const item of input.workdirs) {
+        const dir = typeof item === 'string'
+          ? item.trim()
+          : String(item?.path || '').trim();
+        if (dir) selectedPaths.push(dir);
+      }
+    } else if (input.workdir) {
+      selectedPaths.push(String(input.workdir).trim());
+    }
+    if (!selectedPaths.length) {
+      throw new Error('请至少选择一个工作目录');
+    }
+
+    const result = [];
+    for (const selected of selectedPaths) {
+      const match = projectWorkdirs.find(
+        (entry) => entry.path.replace(/\//g, '\\').toLowerCase()
+          === selected.replace(/\//g, '\\').toLowerCase(),
+      );
+      if (!match) throw new Error(`所选工作目录不属于当前项目: ${selected}`);
+      const key = match.path.replace(/\//g, '\\').toLowerCase();
+      if (!result.some((entry) => entry.path.replace(/\//g, '\\').toLowerCase() === key)) {
+        result.push(match);
+      }
+    }
+    return result;
+  }
+
+  validateTaskWorkdirs(workdirs) {
+    for (const entry of workdirs) {
+      const workdir = entry.path;
+      if (!fs.existsSync(workdir) || !fs.statSync(workdir).isDirectory()) {
+        throw new Error(`工作目录不存在或不是文件夹: ${workdir}`);
+      }
+      if (!this.isWorkdirAllowed(workdir)) {
+        throw new Error(`工作目录不在白名单内: ${workdir}`);
+      }
+    }
   }
 
   createTask(input) {
     const project = this.projects.getProject(input.projectId);
     if (!project) throw new Error('项目不存在');
-    const workdir = this.resolveTaskWorkdir(project, input.workdir);
-    if (!workdir) {
+    const workdirs = this.resolveTaskWorkdirs(project, input);
+    if (!workdirs.length) {
       throw new Error(project.type === 'machine' ? '本机任务必须设置工作目录' : '项目未配置工作目录');
     }
-    if (!fs.existsSync(workdir) || !fs.statSync(workdir).isDirectory()) {
-      throw new Error(`工作目录不存在或不是文件夹: ${workdir}`);
-    }
+    this.validateTaskWorkdirs(workdirs);
+    const workdir = workdirs[0].path;
     const template = getTemplate(input.template);
     if (!template) {
       throw new Error(`模板不存在: ${input.template}`);
-    }
-    if (!this.isWorkdirAllowed(workdir)) {
-      throw new Error(`工作目录不在白名单内: ${workdir}`);
     }
 
     const variables = input.variables || {};
@@ -121,12 +157,15 @@ class TaskQueue {
     }
 
     const promptRendered = renderTemplate(template, {
-      workdir,
+      ...buildWorkdirTemplateContext(workdirs),
       ...variables,
     });
     const attachments = normalizeAttachments(input.attachments);
     const pipelineMode = Boolean(
       input.pipelineMode ?? isPipelineTemplate(template),
+    );
+    const gitCommit = Boolean(
+      input.gitCommit && project.git_enabled && pipelineMode,
     );
     const modelId = resolveTaskModel(
       this.config,
@@ -143,9 +182,11 @@ class TaskQueue {
       variables,
       attachments,
       workdir,
+      workdirs,
       status: 'pending',
       is_complex: Boolean(input.isComplex),
       pipeline_mode: pipelineMode,
+      git_commit: gitCommit,
       model_id: modelId,
       prompt_rendered: promptRendered,
       parent_task_id: input.parentTaskId || null,
@@ -174,9 +215,11 @@ class TaskQueue {
       title: deriveIterationTitle(source.title),
       variables: { requirement },
       attachments: normalizeAttachments(input.attachments),
+      workdirs: source.workdirs,
       workdir: source.workdir,
       isComplex: source.is_complex,
       pipelineMode: source.pipeline_mode,
+      gitCommit: source.git_commit,
       modelId: source.model_id,
       parentTaskId: source.id,
     });
@@ -200,6 +243,32 @@ class TaskQueue {
     this.broadcast('task:status', updated);
     this.kick();
     return updated;
+  }
+
+  cancelTask(id) {
+    const task = this.repo.getTask(id);
+    if (!task) throw new Error('任务不存在');
+    if (!this.runner.isTaskRunning(id)) {
+      throw new Error('任务未在运行中');
+    }
+    this.runner.cancelTask(id);
+    this.repo.addEvent(id, 'user_cancel', { reason: '用户终止' });
+    return this.repo.getTask(id);
+  }
+
+  sendTaskMessage(id, input = {}) {
+    const task = this.repo.getTask(id);
+    if (!task) throw new Error('任务不存在');
+    if (!this.runner.isTaskRunning(id)) {
+      throw new Error('任务未在运行中，无法发送说明');
+    }
+    const message = String(input.message || '').trim();
+    const skipTest = Boolean(input.skipTest);
+    if (!message && !skipTest) throw new Error('消息不能为空');
+    const result = this.runner.steerTask(id, message, { skipTest });
+    this.repo.addEvent(id, 'user_message', { message, skipTest });
+    this.broadcast('task:steer', { id, message, skipTest, ...result });
+    return this.repo.getTask(id);
   }
 
   kick() {
@@ -277,17 +346,24 @@ class TaskQueue {
       const runnerOptions = {
         taskId: task.id,
         workdir: task.workdir,
+        workdirs: task.workdirs || [{ label: '', path: task.workdir }],
         prompt,
         attachments: task.attachments || [],
         modelId: task.model_id,
         resumeSessionId,
         onEvent,
       };
+      const project = this.projects.getProject(task.project_id);
+      const gitCommit = Boolean(project?.git_enabled && task.git_commit);
+      const gitPush = Boolean(project?.git_push);
       const result = task.pipeline_mode
         ? await this.runner.runTask({
           ...runnerOptions,
           mode: 'pipeline',
           testCommand: task.variables?.test_command,
+          gitCommit,
+          gitPush,
+          taskTitle: task.title,
         })
         : await this.runner.runTask({
           ...runnerOptions,

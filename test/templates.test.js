@@ -9,6 +9,8 @@ const {
   validateVariables,
   isPipelineTemplate,
   deriveTaskTitle,
+  buildWorkdirTemplateContext,
+  formatWorkdirsDetail,
 } = require('../templates');
 
 test('任务模板按分类与顺序返回完整列表', () => {
@@ -42,7 +44,7 @@ test('模板变量校验与 prompt 渲染', () => {
   );
 
   const prompt = renderTemplate(template, {
-    workdir: 'D:\\code\\demo',
+    ...buildWorkdirTemplateContext([{ label: '后端', path: 'D:\\code\\demo' }]),
     scope: 'src/service',
     focus: '并发安全',
     context: '支付模块',
@@ -67,6 +69,37 @@ test('isPipelineTemplate 识别流水线模板', () => {
   assert.equal(isPipelineTemplate(getTemplate('feature')), true);
   assert.equal(isPipelineTemplate(getTemplate('bugfix')), true);
   assert.equal(isPipelineTemplate(getTemplate('general')), false);
+});
+
+test('formatWorkdirsDetail 支持单目录与多目录格式', () => {
+  assert.equal(
+    formatWorkdirsDetail([{ label: '', path: 'D:\\code\\api' }]),
+    'D:\\code\\api',
+  );
+  assert.match(
+    formatWorkdirsDetail([
+      { label: '后端', path: 'D:\\code\\api' },
+      { label: '前端', path: 'D:\\code\\web' },
+    ]),
+    /- 后端：D:\\code\\api/,
+  );
+  assert.match(
+    formatWorkdirsDetail([
+      { label: '后端', path: 'D:\\code\\api' },
+      { label: '前端', path: 'D:\\code\\web' },
+    ]),
+    /- 前端：D:\\code\\web/,
+  );
+});
+
+test('buildWorkdirTemplateContext 提供模板变量', () => {
+  const context = buildWorkdirTemplateContext([
+    { label: '后端', path: 'D:\\code\\api' },
+    { label: '前端', path: 'D:\\code\\web' },
+  ]);
+  assert.equal(context.workdir, 'D:\\code\\api');
+  assert.match(context.workdirs_detail, /后端：D:\\code\\api/);
+  assert.match(context.workdirs, /D:\\code\\web/);
 });
 
 test('deriveTaskTitle 优先使用用户标题，否则从描述总结', () => {

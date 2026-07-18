@@ -45,6 +45,30 @@ function getTemplate(id) {
   return loadTemplates().find((item) => item.id === id) || null;
 }
 
+function formatWorkdirsDetail(workdirs) {
+  const list = Array.isArray(workdirs) ? workdirs : [];
+  if (!list.length) return '';
+  if (list.length === 1) {
+    const entry = list[0];
+    const label = String(entry.label || '').trim();
+    return label ? `${label}：${entry.path}` : String(entry.path || '');
+  }
+  return list.map((entry, index) => {
+    const label = String(entry.label || '').trim() || `目录 ${index + 1}`;
+    return `- ${label}：${entry.path}`;
+  }).join('\n');
+}
+
+function buildWorkdirTemplateContext(workdirs) {
+  const list = Array.isArray(workdirs) ? workdirs : [];
+  const primary = list[0]?.path || '';
+  return {
+    workdir: primary,
+    workdirs: list.map((entry) => entry.path).join('\n'),
+    workdirs_detail: formatWorkdirsDetail(list),
+  };
+}
+
 function renderTemplate(template, context) {
   let prompt = template.prompt;
   for (const [key, value] of Object.entries(context)) {
@@ -117,4 +141,6 @@ module.exports = {
   validateVariables,
   isPipelineTemplate,
   deriveTaskTitle,
+  formatWorkdirsDetail,
+  buildWorkdirTemplateContext,
 };

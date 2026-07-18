@@ -25,7 +25,6 @@ class ProjectDeployer {
     if (this.activeProjects.has(projectId)) throw new Error('项目正在部署中');
     const project = this.requireDeployableProject(projectId);
     const tasks = this.repo.listProjectPendingDeployTasks(projectId);
-    if (!tasks.length) throw new Error('项目没有待部署任务');
     this.activeProjects.add(projectId);
     try {
       return await this.executeDeployment(project, tasks);
@@ -46,7 +45,6 @@ class ProjectDeployer {
     const project = this.requireDeployableProject(projectId);
     if (project.deploy_status !== 'awaiting_fix') throw new Error('项目当前没有等待修复的部署');
     const tasks = this.repo.listProjectPendingDeployTasks(projectId);
-    if (!tasks.length) throw new Error('项目没有待部署任务');
     if (!this.runner) throw new Error('Agent Runner 未配置');
 
     this.activeProjects.add(projectId);
@@ -56,15 +54,16 @@ class ProjectDeployer {
         deploy_started_at: new Date().toISOString(),
       });
       this.broadcast('project:deploy', this.projects.getProject(projectId));
-      const owner = tasks[tasks.length - 1];
+      const owner = tasks[tasks.length - 1] || null;
       const errorOutput = project.deploy_error || '未知部署错误';
       await this.runner.runTask({
         taskId: `deploy-repair-${projectId}`,
         workdir: project.workdir,
         prompt: buildDeployRepairPrompt(project.deploy_command, errorOutput),
         mode: 'agent',
-        modelId: owner.model_id,
+        modelId: owner?.model_id,
         onEvent: (type, payload) => {
+          if (!owner) return;
           if (type === 'log') {
             this.repo.addEvent(owner.id, 'deploy_repair_log', payload);
             this.broadcast('task:log', { id: owner.id, ...payload });

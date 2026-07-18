@@ -4,10 +4,16 @@ const { buildQuestionResponse, buildPlanResponse } = require('./interactions');
 const { assertAgentResultSucceeded } = require('./agent-errors');
 const {
   MAX_TEST_RETRIES,
+  MAX_MARKER_RETRIES,
   parseTestResult,
   buildTestPrompt,
   buildFixPrompt,
+  buildMissingMarkerPrompt,
   appendDevSuffix,
+  buildSteerPrompt,
+  shouldSkipTestFromMessage,
+  buildGitCommitPrompt,
+  parseGitCommitResult,
 } = require('./pipeline');
 
 /**
@@ -21,6 +27,52 @@ class AcpRunner {
     this.timeoutMs = config.cursor?.taskTimeoutMs || 1800000;
     this.security = config.security || {};
     this.pendingInteractions = new Map();
+    this.activeRuns = new Map();
+  }
+
+  isTaskRunning(taskId) {
+    return this.activeRuns.has(taskId);
+  }
+
+  cancelTask(taskId, reason = '用户终止任务') {
+    const run = this.activeRuns.get(taskId);
+    if (!run) throw new Error('任务未在运行中');
+    run.aborted = true;
+    run.cancelReason = reason;
+    this.pendingInteractions.delete(taskId);
+    if (run.interrupt) run.interrupt();
+    try {
+      run.child.kill();
+    } catch {
+      // ignore
+    }
+    if (!run.finished) {
+      run.finish(new Error(reason));
+    }
+  }
+
+  steerTask(taskId, message, options = {}) {
+    const run = this.activeRuns.get(taskId);
+    if (!run) throw new Error('任务未在运行中');
+    const text = String(message || '').trim();
+    const skipTest = Boolean(options.skipTest || shouldSkipTestFromMessage(text));
+    if (!text && !skipTest) throw new Error('消息不能为空');
+    if (skipTest) run.flags.skipTest = true;
+    if (text) {
+      run.messageQueue.push(text);
+      run.emit('log', {
+        chunk: `[用户说明] ${text}\n`,
+        stream: 'system',
+      });
+    }
+    if (skipTest && !text) {
+      run.emit('log', {
+        chunk: '[system] 用户要求跳过测试阶段\n',
+        stream: 'system',
+      });
+    }
+    if (run.interrupt) run.interrupt();
+    return { queued: Boolean(text), skipTest };
   }
 
   shouldDenyPermission(params) {
@@ -61,7 +113,7 @@ class AcpRunner {
     return this.runSingleTask(options);
   }
 
-  runSingleTask({ taskId, workdir, prompt, attachments = [], mode = 'agent', modelId, resumeSessionId, onEvent }) {
+  runSingleTask({ taskId, workdir, workdirs, prompt, attachments = [], mode = 'agent', modelId, resumeSessionId, onEvent }) {
     return this.withSession({
       taskId,
       workdir,
@@ -88,10 +140,14 @@ class AcpRunner {
   runPipelineTask({
     taskId,
     workdir,
+    workdirs = [],
     prompt,
     attachments = [],
     modelId,
     testCommand,
+    gitCommit = false,
+    gitPush = false,
+    taskTitle = '',
     resumeSessionId,
     onEvent,
   }) {
@@ -108,24 +164,86 @@ class AcpRunner {
         };
 
         emitPhase('dev');
-        await session.prompt(appendDevSuffix(prompt), attachments);
+        await session.prompt(appendDevSuffix(prompt, workdirs), attachments);
 
-        let testAttempts = 0;
+        let fixAttempts = 0;
+        let markerRetries = 0;
         while (true) {
-          emitPhase('test', { attempt: testAttempts + 1 });
-          await session.prompt(buildTestPrompt(testCommand));
+          const activeRun = this.activeRuns.get(taskId);
+          if (activeRun?.flags?.skipTest) {
+            emit('log', {
+              chunk: '[system] 用户要求跳过测试阶段\n',
+              stream: 'system',
+            });
+            break;
+          }
+
+          emitPhase('test', { attempt: fixAttempts + markerRetries + 1 });
+          await session.prompt(buildTestPrompt(testCommand, workdirs));
+          if (this.activeRuns.get(taskId)?.flags?.skipTest) {
+            emit('log', {
+              chunk: '[system] 用户要求跳过测试阶段\n',
+              stream: 'system',
+            });
+            break;
+          }
           const testSummary = session.getTurnSummary();
           assertAgentResultSucceeded(testSummary);
           const testResult = parseTestResult(testSummary);
-          if (testResult.passed) break;
+          if (testResult.passed) {
+            if (testResult.reason === 'inferred_pass') {
+              emit('log', {
+                chunk: '[system] 测试输出显示通过，但未输出 [TEST:PASS]，已自动判定为通过\n',
+                stream: 'system',
+              });
+            }
+            break;
+          }
 
-          testAttempts += 1;
-          if (testAttempts >= MAX_TEST_RETRIES) {
+          if (testResult.reason === 'missing_marker') {
+            markerRetries += 1;
+            if (markerRetries <= MAX_MARKER_RETRIES) {
+              emit('log', {
+                chunk: `[system] 测试回复缺少结果标记，请求补输出（${markerRetries}/${MAX_MARKER_RETRIES}）\n`,
+                stream: 'system',
+              });
+              emitPhase('test', { reason: 'missing_marker', attempt: markerRetries });
+              await session.prompt(buildMissingMarkerPrompt());
+              continue;
+            }
+            testResult.reason = 'fail';
+            testResult.error = `测试阶段多次未输出 [TEST:PASS] 或 [TEST:FAIL] 标记（已重试 ${MAX_MARKER_RETRIES} 次）`;
+          }
+
+          fixAttempts += 1;
+          if (fixAttempts >= MAX_TEST_RETRIES) {
             throw new Error(`测试失败（已重试 ${MAX_TEST_RETRIES} 次）: ${testResult.error}`);
           }
 
-          emitPhase('dev', { reason: 'test_failed', error: testResult.error, attempt: testAttempts });
+          emitPhase('dev', { reason: 'test_failed', error: testResult.error, attempt: fixAttempts });
           await session.prompt(buildFixPrompt(testResult.error));
+        }
+
+        if (gitCommit) {
+          emitPhase('commit');
+          await session.prompt(buildGitCommitPrompt({ taskTitle, workdirs, push: gitPush }));
+          const commitSummary = session.getTurnSummary();
+          assertAgentResultSucceeded(commitSummary);
+          const commitResult = parseGitCommitResult(commitSummary);
+          if (!commitResult.ok) {
+            throw new Error(`Git 提交失败: ${commitResult.error}`);
+          }
+          if (commitResult.committed) {
+            emit('log', {
+              chunk: '[system] Git 提交完成\n',
+              stream: 'system',
+            });
+          } else if (commitResult.skipped) {
+            emit('log', {
+              chunk: '[system] 无变更，已跳过 Git 提交\n',
+              stream: 'system',
+            });
+          }
         }
 
         emitPhase('pending_deploy');
@@ -161,11 +279,25 @@ class AcpRunner {
         shell: true,
       });
 
+      const activeRun = {
+        aborted: false,
+        cancelReason: null,
+        finished: false,
+        messageQueue: [],
+        flags: { skipTest: false },
+        child,
+        emit,
+        interrupt: null,
+        finish: null,
+      };
+
       const finish = (err, result) => {
         if (finished) return;
         finished = true;
+        activeRun.finished = true;
         clearTimeout(timer);
         this.pendingInteractions.delete(taskId);
+        this.activeRuns.delete(taskId);
         try {
           child.kill();
         } catch {
@@ -174,6 +306,8 @@ class AcpRunner {
         if (err) reject(err);
         else resolve(result);
       };
+      activeRun.finish = finish;
+      this.activeRuns.set(taskId, activeRun);
 
       const timer = setTimeout(() => {
         finish(new Error(`任务超时（${this.timeoutMs}ms）`));
@@ -190,35 +324,73 @@ class AcpRunner {
         child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\n');
       };
 
+      const doSinglePrompt = async (text, attachments = []) => {
+        if (activeRun.aborted) {
+          throw new Error(activeRun.cancelReason || '用户终止任务');
+        }
+        turnChunks = [];
+        const promptBlocks = [{ type: 'text', text }];
+        for (const item of attachments) {
+          if (!item?.mimeType?.startsWith('image/') || !item?.data) continue;
+          promptBlocks.push({
+            type: 'image',
+            mimeType: item.mimeType,
+            data: item.data,
+          });
+        }
+        const promptPromise = send('session/prompt', { sessionId, prompt: promptBlocks });
+        activeRun.interrupt = () => {
+          send('session/cancel', { sessionId }).catch(() => {});
+        };
+        try {
+          await promptPromise;
+        } catch (err) {
+          if (activeRun.aborted) {
+            throw new Error(activeRun.cancelReason || '用户终止任务');
+          }
+          if (!activeRun.messageQueue.length) throw err;
+        } finally {
+          activeRun.interrupt = null;
+        }
+        while (mode === 'plan' && !context.planAccepted && context.planRejectedReason) {
+          const reason = context.planRejectedReason;
+          context.planRejectedReason = null;
+          await send('session/prompt', {
+            sessionId,
+            prompt: [{
+              type: 'text',
+              text: `上一个计划被拒绝。请根据以下反馈重新制定计划，并再次提交确认：${reason}`,
+            }],
+          });
+        }
+        lastTurnSummary = turnChunks.join('').trim() || '(无文本输出)';
+        return lastTurnSummary;
+      };
+
+      const flushSteerMessages = async () => {
+        while (activeRun.messageQueue.length && !activeRun.aborted) {
+          const message = activeRun.messageQueue.shift();
+          emit('log', {
+            chunk: '[system] 已注入用户说明，继续执行\n',
+            stream: 'system',
+          });
+          await doSinglePrompt(buildSteerPrompt(message));
+        }
+      };
+
       const session = {
         context,
         permissionEvents,
         getSummary: () => logChunks.join('').trim() || '(无文本输出)',
         getTurnSummary: () => turnChunks.join('').trim() || '(无文本输出)',
         prompt: async (text, attachments = []) => {
-          turnChunks = [];
-          const promptBlocks = [{ type: 'text', text }];
-          for (const item of attachments) {
-            if (!item?.mimeType?.startsWith('image/') || !item?.data) continue;
-            promptBlocks.push({
-              type: 'image',
-              mimeType: item.mimeType,
-              data: item.data,
-            });
+          try {
+            await doSinglePrompt(text, attachments);
+          } catch (err) {
+            if (activeRun.aborted) throw err;
+            if (!activeRun.messageQueue.length) throw err;
           }
-          await send('session/prompt', { sessionId, prompt: promptBlocks });
-          while (mode === 'plan' && !context.planAccepted && context.planRejectedReason) {
-            const reason = context.planRejectedReason;
-            context.planRejectedReason = null;
-            await send('session/prompt', {
-              sessionId,
-              prompt: [{
-                type: 'text',
-                text: `上一个计划被拒绝。请根据以下反馈重新制定计划，并再次提交确认：${reason}`,
-              }],
-            });
-          }
-          lastTurnSummary = session.getTurnSummary();
+          await flushSteerMessages();
           return lastTurnSummary;
         },
         send,

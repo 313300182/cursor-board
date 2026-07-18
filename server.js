@@ -162,6 +162,8 @@ function main() {
     try {
       const name = String(req.body.name || '').trim();
       const deployCommand = String(req.body.deployCommand || '').trim();
+      const gitEnabled = Boolean(req.body.gitEnabled);
+      const gitPush = Boolean(req.body.gitPush);
       const workdirs = validateProjectWorkdirs(parseCreateProjectWorkdirs(req.body), queue);
       if (!name) throw new Error('项目名称不能为空');
       const project = projects.createProject({
@@ -170,6 +172,8 @@ function main() {
         type: 'normal',
         workdirs,
         deploy_command: deployCommand || null,
+        git_enabled: gitEnabled,
+        git_push: gitEnabled && gitPush,
         created_at: new Date().toISOString(),
       });
       broadcaster.send('project:created', project);
@@ -202,6 +206,19 @@ function main() {
         req.params.id,
         req.body.deployCommand,
       );
+      broadcaster.send('project:updated', project);
+      res.json({ ...project, counts: repo.countByProject(project.id) });
+    } catch (err) {
+      res.status(400).json({ error: String(err.message || err) });
+    }
+  });
+
+  app.patch('/api/projects/:id/git', (req, res) => {
+    try {
+      const project = projects.updateProjectGit(req.params.id, {
+        gitEnabled: req.body.gitEnabled,
+        gitPush: req.body.gitPush,
+      });
       broadcaster.send('project:updated', project);
       res.json({ ...project, counts: repo.countByProject(project.id) });
     } catch (err) {
@@ -285,8 +302,10 @@ function main() {
         template: req.body.template,
         projectId: req.body.projectId,
         workdir: req.body.workdir,
+        workdirs: req.body.workdirs,
         isComplex: Boolean(req.body.isComplex),
         pipelineMode: req.body.pipelineMode,
+        gitCommit: Boolean(req.body.gitCommit),
         modelId: req.body.modelId || undefined,
         variables: req.body.variables || {},
         attachments: req.body.attachments || [],
@@ -300,6 +319,24 @@ function main() {
   app.post('/api/tasks/:id/retry', (req, res) => {
     try {
       const task = queue.retryTask(req.params.id);
+      res.json(task);
+    } catch (err) {
+      res.status(400).json({ error: String(err.message || err) });
+    }
+  });
+
+  app.post('/api/tasks/:id/cancel', (req, res) => {
+    try {
+      const task = queue.cancelTask(req.params.id);
+      res.json(task);
+    } catch (err) {
+      res.status(400).json({ error: String(err.message || err) });
+    }
+  });
+
+  app.post('/api/tasks/:id/message', (req, res) => {
+    try {
+      const task = queue.sendTaskMessage(req.params.id, req.body || {});
       res.json(task);
     } catch (err) {
       res.status(400).json({ error: String(err.message || err) });

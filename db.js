@@ -82,8 +82,19 @@ function ensureSchema(db) {
   ensureColumn(db, 'projects', 'deploy_started_at', 'TEXT');
   ensureColumn(db, 'projects', 'deploy_finished_at', 'TEXT');
   ensureColumn(db, 'projects', 'workdirs_json', 'TEXT');
+  ensureColumn(db, 'projects', 'git_enabled', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn(db, 'projects', 'git_push', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn(db, 'tasks', 'workdirs_json', 'TEXT');
+  ensureColumn(db, 'tasks', 'git_commit', 'INTEGER NOT NULL DEFAULT 0');
   db.exec(`
     UPDATE projects
+    SET workdirs_json = json_array(json_object('path', workdir))
+    WHERE workdirs_json IS NULL
+      AND workdir IS NOT NULL
+      AND trim(workdir) != ''
+  `);
+  db.exec(`
+    UPDATE tasks
     SET workdirs_json = json_array(json_object('path', workdir))
     WHERE workdirs_json IS NULL
       AND workdir IS NOT NULL
@@ -125,20 +136,29 @@ function normalizeWorkdirs(workdirs) {
   return result;
 }
 
-function parseProjectWorkdirs(row) {
-  if (!row) return [];
-  if (row.workdirs_json) {
+function parseWorkdirsJson(workdirsJson, fallbackWorkdir) {
+  if (workdirsJson) {
     try {
-      const parsed = normalizeWorkdirs(JSON.parse(row.workdirs_json));
+      const parsed = normalizeWorkdirs(JSON.parse(workdirsJson));
       if (parsed.length) return parsed;
     } catch (_) {
       // ignore invalid json and fall back to legacy workdir
     }
   }
-  if (row.workdir) {
-    return [{ label: '', path: row.workdir }];
+  if (fallbackWorkdir) {
+    return [{ label: '', path: fallbackWorkdir }];
   }
   return [];
+}
+
+function parseProjectWorkdirs(row) {
+  if (!row) return [];
+  return parseWorkdirsJson(row.workdirs_json, row.workdir);
+}
+
+function parseTaskWorkdirs(row) {
+  if (!row) return [];
+  return parseWorkdirsJson(row.workdirs_json, row.workdir);
 }
 
 function openDb() {
@@ -151,14 +171,18 @@ function openDb() {
 
 function mapTask(row) {
   if (!row) return null;
+  const workdirs = parseTaskWorkdirs(row);
   return {
     ...row,
+    workdirs,
+    workdir: workdirs[0]?.path || row.workdir || null,
     variables: JSON.parse(row.variables || '{}'),
     attachments: row.attachments_json ? JSON.parse(row.attachments_json) : [],
     is_complex: Boolean(row.is_complex),
     pipeline_mode: Boolean(row.pipeline_mode),
     pipeline_phase: row.pipeline_phase || null,
     deploy_completed: Boolean(row.deploy_completed),
+    git_commit: Boolean(row.git_commit),
     archived: Boolean(row.archived),
     archived_at: row.archived_at || null,
     session_id: row.session_id || null,
@@ -174,6 +198,8 @@ function mapProject(row) {
     ...row,
     workdirs,
     workdir: workdirs[0]?.path || row.workdir || null,
+    git_enabled: Boolean(row.git_enabled),
+    git_push: Boolean(row.git_push),
   };
 }
 
@@ -198,9 +224,9 @@ function createProjectRepo(db) {
       const primaryWorkdir = workdirs[0]?.path || project.workdir || null;
       db.prepare(`
         INSERT INTO projects (
-          id, name, type, workdir, workdirs_json, deploy_command, is_system, created_at
+          id, name, type, workdir, workdirs_json, deploy_command, git_enabled, git_push, is_system, created_at
         ) VALUES (
-          @id, @name, @type, @workdir, @workdirs_json, @deploy_command, @is_system, @created_at
+          @id, @name, @type, @workdir, @workdirs_json, @deploy_command, @git_enabled, @git_push, @is_system, @created_at
         )
       `).run({
         id: project.id,
@@ -209,6 +235,8 @@ function createProjectRepo(db) {
         workdir: primaryWorkdir,
         workdirs_json: workdirsJson,
         deploy_command: project.type === 'machine' ? null : (project.deploy_command || null),
+        git_enabled: project.type === 'machine' ? 0 : (project.git_enabled ? 1 : 0),
+        git_push: project.type === 'machine' ? 0 : (project.git_push ? 1 : 0),
         is_system: project.is_system || 0,
         created_at: project.created_at,
       });
@@ -240,6 +268,21 @@ function createProjectRepo(db) {
       if (project.type === 'machine') throw new Error('本机项目不支持部署');
       db.prepare('UPDATE projects SET deploy_command = ? WHERE id = ?')
         .run(String(deployCommand || '').trim() || null, id);
+      return this.getProject(id);
+    },
+
+    updateProjectGit(id, patch) {
+      const project = this.getProject(id);
+      if (!project) throw new Error('项目不存在');
+      if (project.type === 'machine') throw new Error('本机项目不支持 Git 配置');
+      const gitEnabled = Object.prototype.hasOwnProperty.call(patch, 'gitEnabled')
+        ? Boolean(patch.gitEnabled)
+        : project.git_enabled;
+      const gitPush = Object.prototype.hasOwnProperty.call(patch, 'gitPush')
+        ? Boolean(patch.gitPush)
+        : project.git_push;
+      db.prepare('UPDATE projects SET git_enabled = ?, git_push = ? WHERE id = ?')
+        .run(gitEnabled ? 1 : 0, gitPush && gitEnabled ? 1 : 0, id);
       return this.getProject(id);
     },
 
@@ -281,11 +324,11 @@ function createProjectRepo(db) {
 function createTaskRepo(db) {
   const insertTask = db.prepare(`
     INSERT INTO tasks (
-      id, project_id, title, template, variables, attachments_json, workdir, status,
-      is_complex, pipeline_mode, model_id, prompt_rendered, parent_task_id, created_at
+      id, project_id, title, template, variables, attachments_json, workdir, workdirs_json, status,
+      is_complex, pipeline_mode, git_commit, model_id, prompt_rendered, parent_task_id, created_at
     ) VALUES (
-      @id, @project_id, @title, @template, @variables, @attachments_json, @workdir, @status,
-      @is_complex, @pipeline_mode, @model_id, @prompt_rendered, @parent_task_id, @created_at
+      @id, @project_id, @title, @template, @variables, @attachments_json, @workdir, @workdirs_json, @status,
+      @is_complex, @pipeline_mode, @git_commit, @model_id, @prompt_rendered, @parent_task_id, @created_at
     )
   `);
 
@@ -304,9 +347,11 @@ function createTaskRepo(db) {
         variables: JSON.stringify(task.variables || {}),
         attachments_json: JSON.stringify(task.attachments || []),
         workdir: task.workdir,
+        workdirs_json: JSON.stringify(task.workdirs || [{ label: '', path: task.workdir }]),
         status: task.status,
         is_complex: task.is_complex ? 1 : 0,
         pipeline_mode: task.pipeline_mode ? 1 : 0,
+        git_commit: task.git_commit ? 1 : 0,
         model_id: task.model_id || null,
         prompt_rendered: task.prompt_rendered,
         parent_task_id: task.parent_task_id || null,
@@ -503,7 +548,7 @@ function createTaskRepo(db) {
     recoverStaleRunning() {
       const now = new Date().toISOString();
       const stale = db
-        .prepare("SELECT id FROM tasks WHERE status IN ('planning', 'running', 'developing', 'testing', 'deploying')")
+        .prepare("SELECT id FROM tasks WHERE status IN ('planning', 'running', 'developing', 'testing', 'committing', 'deploying')")
         .all();
       for (const row of stale) {
         this.updateStatus(row.id, {
@@ -530,4 +575,5 @@ module.exports = {
   createTaskRepo,
   normalizeWorkdirs,
   parseProjectWorkdirs,
+  parseTaskWorkdirs,
 };

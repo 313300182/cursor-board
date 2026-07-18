@@ -59,6 +59,28 @@ test('项目保存部署命令，本机项目始终没有部署能力', () => {
   db.close();
 });
 
+test('无待部署任务时仍可执行项目部署命令', async () => {
+  const { db, projects, tasks } = createRepos();
+  createProject(projects);
+  let invoked = false;
+  const deployer = new ProjectDeployer({
+    projects,
+    repo: tasks,
+    broadcast() {},
+    executeCommand: async () => {
+      invoked = true;
+      return { stdout: 'redeployed', stderr: '' };
+    },
+  });
+
+  const result = await deployer.deployProject('board');
+
+  assert.equal(invoked, true);
+  assert.equal(result.status, 'success');
+  assert.equal(projects.getProject('board').deploy_status, 'success');
+  db.close();
+});
+
 test('部署成功后一次性完成项目全部待部署任务', async () => {
   const { db, projects, tasks } = createRepos();
   createProject(projects);

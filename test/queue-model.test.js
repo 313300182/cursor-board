@@ -1,9 +1,12 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 
 const TaskQueue = require('../queue');
 
-test('多目录项目创建任务时必须选择所属目录', () => {
+test('多目录项目创建任务时可选择一个或多个目录', () => {
   const { queue, getCreatedTask } = createQueue({
     workdirs: [
       { label: '后端', path: process.cwd() },
@@ -19,20 +22,62 @@ test('多目录项目创建任务时必须选择所属目录', () => {
   });
 
   assert.equal(getCreatedTask().workdir, process.cwd());
+  assert.equal(getCreatedTask().workdirs.length, 1);
+
+  queue.createTask({
+    projectId: 'board',
+    template: 'general',
+    workdirs: [process.cwd(), process.cwd()],
+    variables: { description: '前后端联动' },
+  });
+
+  assert.equal(getCreatedTask().workdirs.length, 1);
 
   assert.throws(() => queue.createTask({
     projectId: 'board',
     template: 'general',
     variables: { description: '缺少目录' },
-  }), /请选择工作目录/);
+  }), /请至少选择一个工作目录/);
+});
+
+test('多目录任务 prompt 包含全部所选目录', () => {
+  const backend = process.cwd();
+  const frontend = fs.mkdtempSync(path.join(os.tmpdir(), 'cursor-board-front-'));
+  try {
+    const { queue, getCreatedTask } = createQueue({
+      workdirs: [
+        { label: '后端', path: backend },
+        { label: '前端', path: frontend },
+      ],
+      allowlist: [backend, frontend],
+    });
+
+    queue.createTask({
+      projectId: 'board',
+      template: 'general',
+      workdirs: [backend, frontend],
+      variables: { description: '联动改动' },
+    });
+
+    assert.match(getCreatedTask().prompt_rendered, /后端：/);
+    assert.match(getCreatedTask().prompt_rendered, /前端：/);
+    assert.match(getCreatedTask().prompt_rendered, /可同时修改多个仓库/);
+    assert.equal(getCreatedTask().workdirs.length, 2);
+  } finally {
+    fs.rmSync(frontend, { recursive: true, force: true });
+  }
 });
 
 function createQueue(projectOverrides = {}) {
   let createdTask;
+  const projectWorkdirs = projectOverrides.workdirs || [{ label: '', path: process.cwd() }];
   const repo = {
     createTask(task) {
-      createdTask = task;
-      return task;
+      createdTask = {
+        ...task,
+        workdirs: task.workdirs || [{ label: '', path: task.workdir }],
+      };
+      return createdTask;
     },
     addEvent() {},
     listTasks() {
@@ -44,13 +89,14 @@ function createQueue(projectOverrides = {}) {
       return {
         id: 'board',
         type: 'normal',
-        workdir: process.cwd(),
-        workdirs: projectOverrides.workdirs || [{ label: '', path: process.cwd() }],
+        workdir: projectWorkdirs[0]?.path || process.cwd(),
+        workdirs: projectWorkdirs,
       };
     },
   };
+  const allowlist = projectOverrides.allowlist || [process.cwd(), path.dirname(process.cwd())];
   const config = {
-    security: { workdirAllowlist: [process.cwd()] },
+    security: { workdirAllowlist: allowlist },
     cursor: {
       models: {
         simpleDefault: 'luna-id',

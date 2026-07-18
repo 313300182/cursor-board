@@ -1,8 +1,12 @@
 const MAX_TEST_RETRIES = 5;
+const MAX_MARKER_RETRIES = 2;
+
+const MISSING_MARKER_ERROR = '测试阶段未输出 [TEST:PASS] 或 [TEST:FAIL] 标记';
 
 const PHASE_STATUS = {
   dev: 'developing',
   test: 'testing',
+  commit: 'committing',
   deploy: 'deploying',
   pending_deploy: 'pending_deploy',
 };
@@ -11,45 +15,109 @@ const PHASE_STATUS = {
  * Dev → test → deploy pipeline helpers for single-session workflows.
  * @author Amadeus
  */
+function inferTestOutcomeFromOutput(text) {
+  const body = String(text || '');
+  const failFooter = body.match(/#\s*fail\s+(\d+)/i);
+  const passFooter = body.match(/#\s*pass\s+(\d+)/i);
+  if (failFooter && passFooter) {
+    const failCount = Number(failFooter[1]);
+    const passCount = Number(passFooter[1]);
+    if (failCount === 0 && passCount > 0) return 'pass';
+    if (failCount > 0) return 'fail';
+  }
+
+  if (/#\s*tests?\s+\d+[\s\S]*#\s*fail\s+0/i.test(body) && /#\s*pass\s+[1-9]\d*/i.test(body)) {
+    return 'pass';
+  }
+
+  if (/\b(?:all tests passed|tests passed successfully)\b/i.test(body)) {
+    return 'pass';
+  }
+
+  if (/\b(?:tests?\s+\d+\s+failed|\bfailed\s+\d+\s+tests?)\b/i.test(body)) {
+    return 'fail';
+  }
+
+  return null;
+}
+
 function parseTestResult(summary) {
   const text = String(summary || '');
   if (/\[TEST:PASS\]/i.test(text)) {
-    return { passed: true, error: null };
+    return { passed: true, error: null, reason: 'pass' };
   }
   const failMatch = text.match(/\[TEST:FAIL\]([\s\S]*?)(?=\[TEST:|$)/i);
   if (/\[TEST:FAIL\]/i.test(text)) {
     return {
       passed: false,
       error: (failMatch ? failMatch[1] : text).trim() || '测试失败，未提供详细报错',
+      reason: 'fail',
     };
   }
+
+  const inferred = inferTestOutcomeFromOutput(text);
+  if (inferred === 'pass') {
+    return { passed: true, error: null, reason: 'inferred_pass' };
+  }
+  if (inferred === 'fail') {
+    return {
+      passed: false,
+      error: '测试输出显示存在失败，但未提供 [TEST:FAIL] 详细报错',
+      reason: 'inferred_fail',
+    };
+  }
+
   return {
     passed: false,
-    error: '测试阶段未输出 [TEST:PASS] 或 [TEST:FAIL] 标记，视为未通过',
+    error: MISSING_MARKER_ERROR,
+    reason: 'missing_marker',
   };
 }
 
-function buildTestPrompt(testCommand) {
+function buildTestPrompt(testCommand, workdirs) {
   const lines = ['【流水线 · 测试阶段】'];
+  const dirs = Array.isArray(workdirs) ? workdirs.filter((entry) => entry?.path) : [];
+  if (dirs.length > 1) {
+    lines.push('本任务涉及多个工作目录，请分别在每个目录下运行对应测试：');
+    dirs.forEach((entry) => {
+      const label = String(entry.label || '').trim() || entry.path;
+      lines.push(`- ${label}：${entry.path}`);
+    });
+  }
   if (testCommand) {
     lines.push(`请运行测试命令：${testCommand}`);
   } else {
     lines.push(
-      '请先检查项目的测试方式（如 package.json scripts、Makefile、pom.xml、pytest 配置、README 等），',
+      '请先检查各工作目录的测试方式（如 package.json scripts、Makefile、pom.xml、pytest 配置、README 等），',
       '确定合适的测试命令并执行。',
     );
   }
   lines.push(
     '要求：',
-    '- 在同一工作目录执行，捕获完整输出',
-    '- 全部通过时在回复末尾单独一行输出：[TEST:PASS]',
-    '- 若有失败时在回复末尾单独一行输出：[TEST:FAIL]，并在其后附上完整报错信息',
+    '- 在各相关工作目录执行测试，捕获完整输出',
+    '- **必须**在回复末尾单独一行输出结果标记（缺标记会导致流水线无法判定）：',
+    '  - 全部通过 → [TEST:PASS]',
+    '  - 存在失败 → [TEST:FAIL]，并在其后附上完整报错信息',
     '- 此阶段不要修改业务代码，不要执行部署',
   );
   return lines.join('\n');
 }
 
+function buildMissingMarkerPrompt() {
+  return [
+    '【流水线 · 测试阶段（补输出标记）】',
+    '上一轮测试回复末尾缺少 [TEST:PASS] 或 [TEST:FAIL] 标记，系统无法判定结果。',
+    '请根据刚才的测试执行情况：',
+    '- 若已全部通过：在回复末尾单独一行输出 [TEST:PASS]，可简要汇总，无需重复跑测试',
+    '- 若有失败：在回复末尾单独一行输出 [TEST:FAIL]，并在其后附上完整报错',
+    '- 此阶段不要修改业务代码，不要执行部署',
+  ].join('\n');
+}
+
 function buildFixPrompt(error) {
+  if (String(error || '').includes(MISSING_MARKER_ERROR)) {
+    return buildMissingMarkerPrompt();
+  }
   return [
     '【流水线 · 开发阶段（测试打回）】',
     '测试未通过，报错如下：',
@@ -61,6 +129,71 @@ function buildFixPrompt(error) {
     '- 修复后不要运行部署',
     '- 不要输出 [TEST:PASS] / [TEST:FAIL]（测试阶段会再次执行）',
   ].join('\n');
+}
+
+function buildGitCommitPrompt({ taskTitle, workdirs, push = false } = {}) {
+  const lines = [
+    '【流水线 · Git 提交阶段】',
+    '测试已通过，请提交本次任务产生的代码变更。',
+  ];
+  if (taskTitle) {
+    lines.push(`任务标题：${taskTitle}`);
+  }
+  const dirs = Array.isArray(workdirs) ? workdirs.filter((entry) => entry?.path) : [];
+  if (dirs.length > 1) {
+    lines.push('', '本任务涉及多个工作目录，请分别在每个 Git 仓库中检查并提交：');
+    dirs.forEach((entry) => {
+      const label = String(entry.label || '').trim() || entry.path;
+      lines.push(`- ${label}：${entry.path}`);
+    });
+  } else if (dirs.length === 1) {
+    lines.push(`工作目录：${dirs[0].path}`);
+  }
+  lines.push(
+    '',
+    '要求：',
+    '- 先在各相关工作目录执行 git status，确认本次任务相关变更',
+    '- 若无任何可提交变更，在回复末尾单独一行输出 [GIT:SKIP]',
+    '- 若有变更：git add 相关文件并 git commit，提交信息应简洁说明本次任务改动',
+    '- **必须**在回复末尾单独一行输出结果标记：',
+    '  - 提交成功 → [GIT:COMMIT]，可附 commit hash 或摘要',
+    '  - 提交失败 → [GIT:FAIL]，并在其后附上完整报错',
+    '- 此阶段不要修改业务代码（除解决 git 冲突等提交问题外）',
+    '- 不要执行部署',
+  );
+  if (push) {
+    lines.push('- 提交成功后执行 git push（不要使用 --force）');
+  } else {
+    lines.push('- 不要 push，仅本地 commit');
+  }
+  return lines.join('\n');
+}
+
+function parseGitCommitResult(summary) {
+  const text = String(summary || '');
+  if (/\[GIT:SKIP\]/i.test(text)) {
+    return { ok: true, committed: false, skipped: true, error: null, reason: 'skip' };
+  }
+  if (/\[GIT:COMMIT\]/i.test(text)) {
+    return { ok: true, committed: true, skipped: false, error: null, reason: 'commit' };
+  }
+  const failMatch = text.match(/\[GIT:FAIL\]([\s\S]*?)(?=\[GIT:|$)/i);
+  if (/\[GIT:FAIL\]/i.test(text)) {
+    return {
+      ok: false,
+      committed: false,
+      skipped: false,
+      error: (failMatch ? failMatch[1] : text).trim() || 'Git 提交失败，未提供详细报错',
+      reason: 'fail',
+    };
+  }
+  return {
+    ok: false,
+    committed: false,
+    skipped: false,
+    error: 'Git 提交阶段未输出 [GIT:COMMIT]、[GIT:SKIP] 或 [GIT:FAIL] 标记',
+    reason: 'missing_marker',
+  };
 }
 
 function buildDeployPrompt(deployCommand, { backlog = [], currentTitle = '' } = {}) {
@@ -118,18 +251,23 @@ function buildDeployRepairPrompt(deployCommand, errorOutput) {
   ].join('\n');
 }
 
-function buildDevPromptSuffix() {
-  return [
+function buildDevPromptSuffix(workdirs) {
+  const dirs = Array.isArray(workdirs) ? workdirs.filter((entry) => entry?.path) : [];
+  const lines = [
     '',
     '【流水线说明】',
     '- 当前为开发阶段：完成实现即可',
     '- 不要运行部署命令',
     '- 不要输出 [TEST:PASS] / [TEST:FAIL]',
-  ].join('\n');
+  ];
+  if (dirs.length > 1) {
+    lines.splice(2, 0, '- 可在以上多个工作目录范围内同步修改（如前后端联动）');
+  }
+  return lines.join('\n');
 }
 
-function appendDevSuffix(prompt) {
-  return `${String(prompt || '').trim()}\n${buildDevPromptSuffix()}`;
+function appendDevSuffix(prompt, workdirs) {
+  return `${String(prompt || '').trim()}\n${buildDevPromptSuffix(workdirs)}`;
 }
 
 function statusForPhase(phase) {
@@ -137,18 +275,47 @@ function statusForPhase(phase) {
 }
 
 function isPipelineRunningStatus(status) {
-  return ['developing', 'testing', 'deploying', 'pending_deploy'].includes(status);
+  return ['developing', 'testing', 'committing', 'deploying', 'pending_deploy'].includes(status);
+}
+
+function isActiveTaskStatus(status) {
+  return ['planning', 'running', 'developing', 'testing', 'committing', 'deploying'].includes(status);
+}
+
+function buildSteerPrompt(message) {
+  return [
+    '【用户补充说明】',
+    String(message || '').trim(),
+    '',
+    '请根据以上反馈调整当前任务方向，并继续执行。',
+    '若用户要求跳过测试或某步骤，按用户指示处理。',
+  ].join('\n');
+}
+
+function shouldSkipTestFromMessage(message) {
+  const text = String(message || '').trim();
+  if (!text) return false;
+  return /跳过\s*测试|不要\s*(运行|跑|执行)\s*测试|skip\s*(the\s*)?test/i.test(text);
 }
 
 module.exports = {
   MAX_TEST_RETRIES,
+  MAX_MARKER_RETRIES,
+  MISSING_MARKER_ERROR,
   PHASE_STATUS,
   parseTestResult,
+  inferTestOutcomeFromOutput,
   buildTestPrompt,
+  buildMissingMarkerPrompt,
   buildFixPrompt,
+  buildGitCommitPrompt,
+  parseGitCommitResult,
   buildDeployPrompt,
   buildDeployRepairPrompt,
   appendDevSuffix,
   statusForPhase,
   isPipelineRunningStatus,
+  isActiveTaskStatus,
+  buildSteerPrompt,
+  shouldSkipTestFromMessage,
 };

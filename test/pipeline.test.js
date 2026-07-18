@@ -9,23 +9,47 @@ const {
   appendDevSuffix,
   statusForPhase,
   buildDeployRepairPrompt,
+  buildGitCommitPrompt,
+  parseGitCommitResult,
 } = require('../pipeline');
 
 test('parseTestResult 识别通过标记', () => {
   assert.deepEqual(parseTestResult('全部通过\n[TEST:PASS]'), {
     passed: true,
     error: null,
+    reason: 'pass',
   });
 });
 
 test('parseTestResult 识别失败并提取报错', () => {
   const result = parseTestResult('执行失败\n[TEST:FAIL]\nAssertionError: expected 1 to equal 2');
   assert.equal(result.passed, false);
+  assert.equal(result.reason, 'fail');
   assert.match(result.error, /AssertionError/);
 });
 
-test('parseTestResult 无标记视为失败', () => {
-  assert.equal(parseTestResult('测试跑完了').passed, false);
+test('parseTestResult 无标记时返回 missing_marker', () => {
+  const result = parseTestResult('测试跑完了');
+  assert.equal(result.passed, false);
+  assert.equal(result.reason, 'missing_marker');
+});
+
+test('parseTestResult 可从 node:test TAP 输出推断通过', () => {
+  const summary = [
+    'ok 82 - deriveTaskTitle 会截断过长描述',
+    '# tests 83',
+    '# pass 83',
+    '# fail 0',
+  ].join('\n');
+  const result = parseTestResult(summary);
+  assert.equal(result.passed, true);
+  assert.equal(result.reason, 'inferred_pass');
+});
+
+test('buildMissingMarkerPrompt 要求补输出标记', () => {
+  const { buildMissingMarkerPrompt } = require('../pipeline');
+  assert.match(buildMissingMarkerPrompt(), /\[TEST:PASS\]/);
+  assert.match(buildMissingMarkerPrompt(), /无需重复跑测试/);
 });
 
 test('buildFixPrompt 包含报错信息', () => {
@@ -40,16 +64,38 @@ test('appendDevSuffix 追加流水线开发说明', () => {
 test('statusForPhase 映射阶段到状态', () => {
   assert.equal(statusForPhase('dev'), 'developing');
   assert.equal(statusForPhase('test'), 'testing');
+  assert.equal(statusForPhase('commit'), 'committing');
   assert.equal(statusForPhase('pending_deploy'), 'pending_deploy');
   assert.equal(statusForPhase('deploy'), 'deploying');
+});
+
+test('isActiveTaskStatus 包含执行中与流水线阶段', () => {
+  const { isActiveTaskStatus } = require('../pipeline');
+  assert.equal(isActiveTaskStatus('planning'), true);
+  assert.equal(isActiveTaskStatus('testing'), true);
+  assert.equal(isActiveTaskStatus('awaiting_input'), false);
 });
 
 test('buildTestPrompt 包含测试命令', () => {
   assert.match(buildTestPrompt('npm run test:unit'), /npm run test:unit/);
 });
 
-test('buildTestPrompt 无命令时引导 AI 自动识别', () => {
-  assert.match(buildTestPrompt(), /package\.json/);
+test('appendDevSuffix 多目录时提示可联动修改', () => {
+  const workdirs = [
+    { label: '后端', path: 'D:\\code\\api' },
+    { label: '前端', path: 'D:\\code\\web' },
+  ];
+  assert.match(appendDevSuffix('hello', workdirs), /前后端联动/);
+});
+
+test('buildTestPrompt 多目录时分别测试', () => {
+  const prompt = buildTestPrompt(null, [
+    { label: '后端', path: 'D:\\code\\api' },
+    { label: '前端', path: 'D:\\code\\web' },
+  ]);
+  assert.match(prompt, /多个工作目录/);
+  assert.match(prompt, /后端：D:\\code\\api/);
+  assert.match(prompt, /前端：D:\\code\\web/);
 });
 
 test('buildDeployPrompt 无命令时引导 AI 自动识别', () => {
@@ -74,4 +120,22 @@ test('buildDeployRepairPrompt 要求修复但不直接部署', () => {
   assert.match(prompt, /npm run deploy/);
   assert.match(prompt, /exit 1/);
   assert.match(prompt, /不要执行部署命令/);
+});
+
+test('buildGitCommitPrompt 包含提交标记说明', () => {
+  const prompt = buildGitCommitPrompt({
+    taskTitle: '修复登录',
+    workdirs: [{ label: '', path: 'D:\\code\\app' }],
+    push: true,
+  });
+  assert.match(prompt, /修复登录/);
+  assert.match(prompt, /\[GIT:COMMIT\]/);
+  assert.match(prompt, /git push/);
+});
+
+test('parseGitCommitResult 识别提交与跳过', () => {
+  assert.equal(parseGitCommitResult('已提交\n[GIT:COMMIT] abc1234').ok, true);
+  assert.equal(parseGitCommitResult('无变更\n[GIT:SKIP]').skipped, true);
+  assert.equal(parseGitCommitResult('失败\n[GIT:FAIL]\nerror').ok, false);
+  assert.equal(parseGitCommitResult('缺少标记').reason, 'missing_marker');
 });

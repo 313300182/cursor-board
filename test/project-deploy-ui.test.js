@@ -21,6 +21,11 @@ test('本机项目会隐藏项目部署区域', () => {
   assert.match(html, /projectDeployBar/);
 });
 
+test('部署按钮在无待部署任务时仍可点击', () => {
+  assert.match(html, /deployProjectBtn'\)\.disabled=!state\.project\.deploy_command/);
+  assert.doesNotMatch(html, /deployProjectBtn'\)\.disabled=!pending/);
+});
+
 test('部署失败提供批准 Agent 修复按钮', () => {
   assert.match(html, /id="approveDeployFixBtn"/);
   assert.match(html, /respondDeployRepair\(true\)/);

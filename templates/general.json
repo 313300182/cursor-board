@@ -14,5 +14,5 @@
       "placeholder": "描述你希望 Agent 完成的具体任务（支持粘贴截图）"
     }
   ],
-  "prompt": "工作目录：{{workdir}}\n\n任务：{{description}}\n\n要求：\n- 在当前工作目录完成任务\n- 完成后给出简洁的结果摘要"
+  "prompt": "工作目录：\n{{workdirs_detail}}\n\n任务：{{description}}\n\n要求：\n- 在以上工作目录范围内完成任务（可同时修改多个仓库）\n- 完成后给出简洁的结果摘要"
 }

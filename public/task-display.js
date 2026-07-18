@@ -14,6 +14,7 @@
   function statusGroup(status) {
     if (status === 'developing') return 'developing';
     if (status === 'testing') return 'testing';
+    if (status === 'committing') return 'committing';
     if (['pending_deploy', 'deploying'].includes(status)) return 'deploy';
     if (status === 'planning') return 'planning';
     if (['awaiting_input', 'pending_approval'].includes(status)) return 'waiting';
@@ -217,6 +218,10 @@
     };
   }
 
+  function isActiveTaskStatus(status) {
+    return ['planning', 'running', 'developing', 'testing', 'committing', 'deploying'].includes(status);
+  }
+
   return {
     statusGroup,
     sortTasksForGroup,
@@ -233,5 +238,6 @@
     renderLogChunksHtml,
     DONE_VISIBLE_DEFAULT,
     limitDoneTasksForDisplay,
+    isActiveTaskStatus,
   };
 }));

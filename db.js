@@ -387,6 +387,7 @@ function createTaskRepo(db) {
     updateStatus(id, patch) {
       const fields = [
         'status',
+        'title',
         'result_summary',
         'error_message',
         'started_at',
@@ -399,6 +400,42 @@ function createTaskRepo(db) {
       if (entries.length === 0) return this.getTask(id);
       const assignments = entries.map((field) => `${field} = @${field}`).join(', ');
       db.prepare(`UPDATE tasks SET ${assignments} WHERE id = @id`).run({ id, ...patch });
+      return this.getTask(id);
+    },
+
+    updateForIteration(id, patch) {
+      const fields = [
+        'status',
+        'result_summary',
+        'error_message',
+        'started_at',
+        'finished_at',
+        'pipeline_phase',
+        'deploy_completed',
+        'prompt_rendered',
+        'git_commit',
+      ];
+      const entries = fields.filter((field) => Object.prototype.hasOwnProperty.call(patch, field));
+      const assignments = entries.map((field) => `${field} = @${field}`).join(', ');
+      const values = { id, ...patch };
+      if (Object.prototype.hasOwnProperty.call(patch, 'git_commit')) {
+        values.git_commit = patch.git_commit ? 1 : 0;
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, 'variables')) {
+        values.variables = JSON.stringify(patch.variables || {});
+      }
+      const variableAssignment = Object.prototype.hasOwnProperty.call(patch, 'variables')
+        ? `${assignments ? `${assignments}, ` : ''}variables = @variables`
+        : assignments;
+      if (!variableAssignment) return this.getTask(id);
+      db.prepare(`UPDATE tasks SET ${variableAssignment} WHERE id = @id`).run(values);
+      return this.getTask(id);
+    },
+
+    updateTitle(id, title) {
+      const trimmed = String(title || '').trim();
+      if (!trimmed) return this.getTask(id);
+      db.prepare('UPDATE tasks SET title = ? WHERE id = ?').run(trimmed.slice(0, 120), id);
       return this.getTask(id);
     },
 

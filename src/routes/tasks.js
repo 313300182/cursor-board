@@ -82,8 +82,10 @@ function createTasksRouter(deps) {
     const task = queue.iterateTask(req.params.id, {
       requirement: req.body.requirement,
       attachments: req.body.attachments || [],
+      gitCommit: req.body.gitCommit,
+      gitPush: req.body.gitPush,
     });
-    res.status(201).json(task);
+    res.json(task);
   }));
 
   router.post('/:id/interaction', asyncHandler(async (req, res) => {

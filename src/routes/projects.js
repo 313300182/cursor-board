@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const express = require('express');
 const { normalizeWorkdirs } = require('../../db');
 const { scanProjectRulesForWorkdirs } = require('../../project-rules');
+const { scanProjectSkillsForWorkdirs } = require('../../project-skills');
 const { asyncHandler, HttpError } = require('../middleware/error');
 
 function validateProjectWorkdirs(workdirs, queue) {
@@ -115,6 +116,16 @@ function createProjectsRouter(deps) {
     if (!project) throw new HttpError(404, '项目不存在');
     try {
       res.json(await scanProjectRulesForWorkdirs(project.workdirs));
+    } catch (err) {
+      throw new HttpError(500, String(err.message || err));
+    }
+  }));
+
+  router.get('/:id/skills', asyncHandler(async (req, res) => {
+    const project = projects.getProject(req.params.id);
+    if (!project) throw new HttpError(404, '项目不存在');
+    try {
+      res.json(await scanProjectSkillsForWorkdirs(project.workdirs));
     } catch (err) {
       throw new HttpError(500, String(err.message || err));
     }

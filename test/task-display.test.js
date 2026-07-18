@@ -15,6 +15,11 @@ const {
   renderLogChunksHtml,
   DONE_VISIBLE_DEFAULT,
   limitDoneTasksForDisplay,
+  isTerminalTaskStatus,
+  isIterableTaskStatus,
+  isCompletedRoundStatus,
+  parseTaskDisplayRounds,
+  renderTaskRoundsHtml,
 } = require('../public/task-display');
 
 function task(id, patch = {}) {
@@ -100,6 +105,14 @@ test('appendLogChunk 追加实时 chunk', () => {
   ]);
 });
 
+test('isTerminalTaskStatus 识别已结束任务', () => {
+  assert.equal(isTerminalTaskStatus('done'), true);
+  assert.equal(isTerminalTaskStatus('failed'), true);
+  assert.equal(isTerminalTaskStatus('needs_human'), true);
+  assert.equal(isTerminalTaskStatus('running'), false);
+  assert.equal(isTerminalTaskStatus('pending'), false);
+});
+
 test('resolveTaskSummary 优先使用 result_summary', () => {
   assert.equal(resolveTaskSummary({
     status: 'done',
@@ -143,6 +156,59 @@ test('renderLogChunksHtml 对 message 流渲染 Markdown', () => {
   assert.match(html, /log-chunk-message/);
   assert.match(html, /<strong>结论<\/strong>/);
   assert.doesNotMatch(html, /\*\*结论/);
+});
+
+test('isIterableTaskStatus 识别可迭代任务', () => {
+  assert.equal(isIterableTaskStatus('done'), true);
+  assert.equal(isIterableTaskStatus('pending_deploy'), true);
+  assert.equal(isIterableTaskStatus('developing'), false);
+});
+
+test('isCompletedRoundStatus 包含待部署', () => {
+  assert.equal(isCompletedRoundStatus('pending_deploy'), true);
+  assert.equal(isCompletedRoundStatus('developing'), false);
+});
+
+test('parseTaskDisplayRounds 按迭代轮次拆分输出与摘要', () => {
+  const events = [
+    { type: 'log_chunk', payload: { chunk: '第一轮输出', stream: 'message' } },
+    { type: 'iteration_round', payload: { round: 1, summary: '第一轮摘要' } },
+    { type: 'iteration_start', payload: { round: 2, requirement: '继续优化' } },
+    { type: 'log_chunk', payload: { chunk: '第二轮输出', stream: 'message' } },
+  ];
+  const task = { status: 'pending_deploy', result_summary: '第二轮摘要' };
+  const rounds = parseTaskDisplayRounds(events, task);
+  assert.equal(rounds.length, 2);
+  assert.equal(rounds[0].label, '初始任务');
+  assert.equal(rounds[0].summary, '第一轮摘要');
+  assert.match(rounds[0].chunks[0].text, /第一轮输出/);
+  assert.equal(rounds[1].label, '迭代 2');
+  assert.equal(rounds[1].summary, '第二轮摘要');
+  assert.match(rounds[1].chunks[0].text, /第二轮输出/);
+});
+
+test('renderTaskRoundsHtml 渲染多轮区块', () => {
+  const html = renderTaskRoundsHtml([
+    {
+      round: 1,
+      label: '初始任务',
+      chunks: [{ stream: 'message', text: 'hello' }],
+      summary: '完成',
+      complete: true,
+    },
+    {
+      round: 2,
+      label: '迭代 2',
+      chunks: [{ stream: 'message', text: 'world' }],
+      summary: '',
+      complete: false,
+    },
+  ], { status: 'developing' });
+  assert.match(html, /iteration-round/);
+  assert.match(html, /初始任务/);
+  assert.match(html, /迭代 2/);
+  assert.match(html, /hello/);
+  assert.match(html, /world/);
 });
 
 test('已完成列默认只展示 7 条', () => {

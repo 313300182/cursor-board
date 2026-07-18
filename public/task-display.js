@@ -96,7 +96,7 @@
   }
 
   function summaryPlaceholder(status) {
-    if (['done', 'failed', 'needs_human'].includes(status)) {
+    if (['done', 'failed', 'needs_human', 'pending_deploy'].includes(status)) {
       return '暂无结果摘要';
     }
     return '任务执行中，完成后将在此显示摘要…';
@@ -221,6 +221,116 @@
     return ['planning', 'running', 'developing', 'testing', 'committing', 'deploying'].includes(status);
   }
 
+  function isTerminalTaskStatus(status) {
+    return ['done', 'failed', 'needs_human'].includes(status);
+  }
+
+  function isIterableTaskStatus(status) {
+    return ['done', 'pending_deploy'].includes(status);
+  }
+
+  function isCompletedRoundStatus(status) {
+    return ['done', 'pending_deploy', 'failed', 'needs_human'].includes(status);
+  }
+
+  function roundLabel(round) {
+    return round === 1 ? '初始任务' : `迭代 ${round}`;
+  }
+
+  function parseTaskDisplayRounds(events, task) {
+    const iterationStarts = [];
+    const iterationSummaries = new Map();
+    const list = events || [];
+
+    for (let index = 0; index < list.length; index += 1) {
+      const event = list[index];
+      if (event.type === 'iteration_round') {
+        iterationSummaries.set(event.payload?.round, event.payload?.summary || '');
+      }
+      if (event.type === 'iteration_start') {
+        iterationStarts.push({
+          index,
+          round: event.payload?.round || iterationStarts.length + 2,
+        });
+      }
+    }
+
+    const rounds = [];
+    let segmentStart = 0;
+    let roundNum = 1;
+
+    for (const start of iterationStarts) {
+      rounds.push({
+        round: roundNum,
+        label: roundLabel(roundNum),
+        chunks: parseTaskLogEvents(list.slice(segmentStart, start.index)),
+        summary: iterationSummaries.get(roundNum) || '',
+        complete: true,
+      });
+      segmentStart = start.index + 1;
+      roundNum = start.round;
+    }
+
+    const currentChunks = parseTaskLogEvents(list.slice(segmentStart));
+    const complete = isCompletedRoundStatus(task?.status);
+    rounds.push({
+      round: roundNum,
+      label: roundLabel(roundNum),
+      chunks: currentChunks,
+      summary: complete ? String(task?.result_summary || '').trim() : '',
+      complete,
+    });
+    return rounds;
+  }
+
+  function resolveRoundSummary(round, task) {
+    const text = String(round?.summary || '').trim();
+    if (text) return text;
+    if (round?.complete) return summaryPlaceholder(task?.status);
+    return summaryPlaceholder('running');
+  }
+
+  function renderTaskRoundHtml(round, task, options = {}) {
+    const summary = resolveRoundSummary(round, task);
+    const hasSummary = Boolean(String(round?.summary || '').trim());
+    const summaryClass = hasSummary ? 'markdown' : 'markdown placeholder';
+    const summaryContent = hasSummary
+      ? formatMarkdown(summary)
+      : escapeHtml(summary);
+    const showSummary = round.complete || options.showIncompleteSummary;
+    const parts = [
+      `<section class="iteration-round" data-round="${round.round}">`,
+      `<div class="iteration-round-label">${escapeHtml(round.label)}</div>`,
+      '<section class="output-section">',
+      '<h3>实时输出</h3>',
+      `<div class="log-stream">${renderLogChunksHtml(round.chunks, options.logOptions)}</div>`,
+      '</section>',
+    ];
+    if (showSummary) {
+      parts.push(
+        '<section class="output-section">',
+        '<h3>结果摘要</h3>',
+        `<div class="summary-box ${summaryClass}">${summaryContent}</div>`,
+        '</section>',
+      );
+    }
+    parts.push('</section>');
+    return parts.join('');
+  }
+
+  function renderTaskRoundsHtml(rounds, task, options = {}) {
+    if (!rounds?.length) {
+      return renderTaskRoundHtml({
+        round: 1,
+        label: roundLabel(1),
+        chunks: [],
+        summary: '',
+        complete: isCompletedRoundStatus(task?.status),
+      }, task, options);
+    }
+    return rounds.map((round) => renderTaskRoundHtml(round, task, options)).join('');
+  }
+
   return {
     statusGroup,
     sortTasksForGroup,
@@ -238,5 +348,13 @@
     DONE_VISIBLE_DEFAULT,
     limitDoneTasksForDisplay,
     isActiveTaskStatus,
+    isTerminalTaskStatus,
+    isIterableTaskStatus,
+    isCompletedRoundStatus,
+    roundLabel,
+    parseTaskDisplayRounds,
+    resolveRoundSummary,
+    renderTaskRoundHtml,
+    renderTaskRoundsHtml,
   };
 }));

@@ -3,10 +3,12 @@ const test = require('node:test');
 
 const {
   parseTestResult,
+  parseTaskTitleMarker,
   buildTestPrompt,
   buildFixPrompt,
   buildDeployPrompt,
   appendDevSuffix,
+  appendTitleSuffix,
   statusForPhase,
   buildDeployRepairPrompt,
   buildGitCommitPrompt,
@@ -59,6 +61,16 @@ test('buildFixPrompt 包含报错信息', () => {
 
 test('appendDevSuffix 追加流水线开发说明', () => {
   assert.match(appendDevSuffix('hello'), /不要运行部署/);
+  assert.match(appendDevSuffix('hello'), /\[TITLE:/);
+});
+
+test('parseTaskTitleMarker 解析标题标记', () => {
+  assert.equal(parseTaskTitleMarker('完成修改\n[TITLE:优化任务标题]'), '优化任务标题');
+  assert.equal(parseTaskTitleMarker('无标题标记'), null);
+});
+
+test('appendTitleSuffix 追加标题总结说明', () => {
+  assert.match(appendTitleSuffix('执行任务'), /\[TITLE:/);
 });
 
 test('statusForPhase 映射阶段到状态', () => {

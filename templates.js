@@ -90,6 +90,15 @@ function isPipelineTemplate(template) {
 }
 
 const TITLE_MAX_LEN = 48;
+const PROVISIONAL_TITLE_MAX_LEN = 28;
+
+function firstMeaningfulLine(text) {
+  return String(text || '')
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)[0] || '';
+}
 
 function normalizeTitleText(text) {
   return String(text || '')
@@ -120,12 +129,15 @@ function deriveTaskTitle(template, variables, explicitTitle) {
   const trimmed = String(explicitTitle || '').trim();
   if (trimmed) return trimmed.slice(0, 120);
 
-  const primary = normalizeTitleText(pickPrimaryVariable(template, variables));
-  if (primary) {
-    const summary = primary.length > TITLE_MAX_LEN
-      ? `${primary.slice(0, TITLE_MAX_LEN)}…`
-      : primary;
+  const firstLine = firstMeaningfulLine(pickPrimaryVariable(template, variables));
+  if (firstLine) {
     const prefix = template?.name ? `${template.name} · ` : '';
+    if (firstLine.length > PROVISIONAL_TITLE_MAX_LEN) {
+      return `${prefix}待总结`.slice(0, 120);
+    }
+    const summary = firstLine.length > TITLE_MAX_LEN
+      ? `${firstLine.slice(0, TITLE_MAX_LEN)}…`
+      : firstLine;
     return `${prefix}${summary}`.slice(0, 120);
   }
 

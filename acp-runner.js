@@ -6,10 +6,12 @@ const {
   MAX_TEST_RETRIES,
   MAX_MARKER_RETRIES,
   parseTestResult,
+  parseTaskTitleMarker,
   buildTestPrompt,
   buildFixPrompt,
   buildMissingMarkerPrompt,
   appendDevSuffix,
+  appendTitleSuffix,
   buildSteerPrompt,
   shouldSkipTestFromMessage,
   buildGitCommitPrompt,
@@ -122,7 +124,7 @@ class AcpRunner {
       resumeSessionId,
       onEvent,
       run: async (session) => {
-        await session.prompt(prompt, attachments);
+        await session.prompt(appendTitleSuffix(prompt), attachments);
         if (mode === 'plan' && session.context.planAccepted) {
           await session.prompt(
             '计划已经批准。现在切换到执行模式，严格按照已批准的计划完成任务，并在完成后汇报结果。',
@@ -132,6 +134,7 @@ class AcpRunner {
         assertAgentResultSucceeded(summary);
         return {
           permissionEvents: session.permissionEvents,
+          suggestedTitle: parseTaskTitleMarker(summary),
         };
       },
     });
@@ -168,6 +171,11 @@ class AcpRunner {
 
         emitPhase('dev');
         await session.prompt(appendDevSuffix(prompt, workdirs), attachments);
+        const devSummary = session.getTurnSummary();
+        const suggestedTitle = parseTaskTitleMarker(devSummary);
+        if (suggestedTitle) {
+          emit('title', { title: suggestedTitle });
+        }
 
         let fixAttempts = 0;
         let markerRetries = 0;
@@ -254,6 +262,7 @@ class AcpRunner {
           permissionEvents: session.permissionEvents,
           awaitingDeploy: true,
           resultSummary: session.getSummary(),
+          suggestedTitle,
         };
       },
     });

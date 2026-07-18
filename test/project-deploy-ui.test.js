@@ -28,7 +28,16 @@ test('部署按钮在无待部署任务时仍可点击', () => {
   assert.doesNotMatch(html, /deployProjectBtn'\)\.disabled=!pending/);
 });
 
-test('部署失败提供批准 Agent 修复按钮', () => {
-  assert.match(html, /id="approveDeployFixBtn"/);
-  assert.match(html, /respondDeployRepair\(true\)/);
+test('项目页提供 Cursor Rules 弹窗入口', () => {
+  assert.match(html, /id="rulesBtn"/);
+  assert.match(html, /id="rulesModal"/);
+  assert.match(html, /openRulesModal/);
+  assert.doesNotMatch(html, /id="rulesPanel"/);
+});
+
+test('项目页提供 Cursor Skills 弹窗入口', () => {
+  assert.match(html, /id="skillsBtn"/);
+  assert.match(html, /id="skillsModal"/);
+  assert.match(html, /openSkillsModal/);
+  assert.doesNotMatch(html, /id="skillsPanel"/);
 });

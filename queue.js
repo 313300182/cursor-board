@@ -26,10 +26,8 @@ function buildIterationContextFallback(parentTask) {
   return parts.join('\n');
 }
 
-function deriveIterationTitle(sourceTitle) {
-  const prefix = String(sourceTitle || '任务').trim();
-  const trimmed = prefix.length > 80 ? `${prefix.slice(0, 80)}…` : prefix;
-  return `${trimmed} · 迭代`.slice(0, 120);
+function isIterableStatus(status) {
+  return ['done', 'pending_deploy'].includes(status);
 }
 
 /**
@@ -202,27 +200,62 @@ class TaskQueue {
   iterateTask(id, input = {}) {
     const source = this.repo.getTask(id);
     if (!source) throw new Error('任务不存在');
-    if (source.status !== 'done') {
-      throw new Error('仅已完成任务可发起迭代');
+    if (!isIterableStatus(source.status)) {
+      throw new Error('仅已完成或待部署任务可发起迭代');
     }
 
     const requirement = String(input.requirement || '').trim();
     if (!requirement) throw new Error('请填写优化需求');
 
-    return this.createTask({
-      projectId: source.project_id,
-      template: 'iteration',
-      title: deriveIterationTitle(source.title),
-      variables: { requirement },
-      attachments: normalizeAttachments(input.attachments),
-      workdirs: source.workdirs,
-      workdir: source.workdir,
-      isComplex: source.is_complex,
-      pipelineMode: source.pipeline_mode,
-      gitCommit: source.git_commit,
-      modelId: source.model_id,
-      parentTaskId: source.id,
+    const iterationTemplate = getTemplate('iteration');
+    if (!iterationTemplate) throw new Error('迭代模板不存在');
+
+    const project = this.projects.getProject(source.project_id);
+    const pipelineMode = Boolean(source.pipeline_mode);
+    const gitCommit = Object.prototype.hasOwnProperty.call(input, 'gitCommit')
+      ? Boolean(input.gitCommit && project?.git_enabled && pipelineMode)
+      : Boolean(project?.git_enabled && pipelineMode);
+    const gitPush = Object.prototype.hasOwnProperty.call(input, 'gitPush')
+      ? Boolean(input.gitPush && gitCommit)
+      : gitCommit;
+
+    const events = this.repo.listEvents(id);
+    const closedRound = events.filter((event) => event.type === 'iteration_round').length + 1;
+    const nextRound = closedRound + 1;
+    const variables = { ...source.variables, requirement };
+    if (gitCommit && Object.prototype.hasOwnProperty.call(input, 'gitPush')) {
+      variables.__git_push = gitPush;
+    } else {
+      delete variables.__git_push;
+    }
+    const promptRendered = renderTemplate(iterationTemplate, {
+      ...buildWorkdirTemplateContext(source.workdirs),
+      ...variables,
     });
+
+    this.repo.addEvent(id, 'iteration_round', {
+      round: closedRound,
+      summary: source.result_summary || '',
+    });
+    this.repo.addEvent(id, 'iteration_start', { round: nextRound, requirement });
+    this.repo.setInteraction(id, null);
+
+    const updated = this.repo.updateForIteration(id, {
+      status: 'pending',
+      result_summary: null,
+      error_message: null,
+      started_at: null,
+      finished_at: null,
+      pipeline_phase: null,
+      deploy_completed: source.pipeline_mode ? 0 : source.deploy_completed,
+      prompt_rendered: promptRendered,
+      git_commit: gitCommit,
+      variables,
+    });
+    this.repo.addEvent(id, 'status_change', { status: 'pending', reason: 'iterate' });
+    this.broadcast('task:status', updated);
+    this.kick();
+    return updated;
   }
 
   retryTask(id) {
@@ -291,6 +324,15 @@ class TaskQueue {
     return updated;
   }
 
+  applySuggestedTitle(task, suggestedTitle) {
+    const title = String(suggestedTitle || '').trim();
+    if (!title || title === task.title) return task;
+    const updated = this.repo.updateTitle(task.id, title);
+    this.repo.addEvent(task.id, 'title_update', { title });
+    this.broadcast('task:status', updated);
+    return updated;
+  }
+
   async runTask(task) {
     const startedAt = new Date().toISOString();
     const initialStatus = task.pipeline_mode
@@ -333,12 +375,15 @@ class TaskQueue {
         this.broadcast('task:status', updated);
         current = updated;
       }
+      if (type === 'title') {
+        current = this.applySuggestedTitle(current, payload.title);
+      }
     };
 
     try {
       const parentTask = task.parent_task_id ? this.repo.getTask(task.parent_task_id) : null;
       let prompt = task.prompt_rendered;
-      const resumeSessionId = parentTask?.session_id || null;
+      const resumeSessionId = task.session_id || parentTask?.session_id || null;
       if (parentTask && !resumeSessionId) {
         prompt = `${buildIterationContextFallback(parentTask)}\n\n${prompt}`;
       }
@@ -355,7 +400,13 @@ class TaskQueue {
       };
       const project = this.projects.getProject(task.project_id);
       const gitCommit = Boolean(project?.git_enabled && task.git_commit);
-      const gitPush = Boolean(project?.git_push);
+      const gitPush = Boolean(
+        gitCommit && (
+          Object.prototype.hasOwnProperty.call(task.variables || {}, '__git_push')
+            ? task.variables.__git_push
+            : project?.git_push
+        ),
+      );
       const result = task.pipeline_mode
         ? await this.runner.runTask({
           ...runnerOptions,
@@ -371,6 +422,9 @@ class TaskQueue {
         });
       const awaitingDeploy = Boolean(task.pipeline_mode && result.awaitingDeploy);
       const completedStatus = awaitingDeploy ? 'pending_deploy' : 'done';
+      if (result.suggestedTitle) {
+        current = this.applySuggestedTitle(current, result.suggestedTitle);
+      }
       current = this.repo.updateStatus(task.id, {
         status: completedStatus,
         pipeline_phase: awaitingDeploy ? 'pending_deploy' : 'done',
@@ -434,6 +488,7 @@ class TaskQueue {
 }
 
 module.exports = TaskQueue;
+module.exports.isIterableStatus = isIterableStatus;
 
 function normalizeAttachments(raw) {
   if (!Array.isArray(raw)) return [];

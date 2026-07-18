@@ -114,7 +114,7 @@ test('deriveTaskTitle 优先使用用户标题，否则从描述总结', () => {
   );
   assert.match(
     deriveTaskTitle(template, { description: '第一行\n第二行补充' }, ''),
-    /通用任务 · 第一行 · 第二行补充/,
+    /通用任务 · 第一行$/,
   );
   assert.equal(
     deriveTaskTitle(template, { description: '' }, ''),
@@ -122,12 +122,11 @@ test('deriveTaskTitle 优先使用用户标题，否则从描述总结', () => {
   );
 });
 
-test('deriveTaskTitle 会截断过长描述', () => {
+test('deriveTaskTitle 过长描述使用待总结占位', () => {
   const template = getTemplate('general');
   const longText = '这是一段很长的任务描述'.repeat(10);
   const title = deriveTaskTitle(template, { description: longText }, '');
-  assert.ok(title.length <= 120);
-  assert.match(title, /…$/);
+  assert.equal(title, '通用任务 · 待总结');
 });
 
 test('各模板主 textarea 字段应支持图片附件', () => {

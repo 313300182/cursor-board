@@ -251,6 +251,27 @@ function buildDeployRepairPrompt(deployCommand, errorOutput) {
   ].join('\n');
 }
 
+const TASK_TITLE_MAX_LEN = 48;
+
+function parseTaskTitleMarker(text) {
+  const match = String(text || '').match(/\[TITLE:([^\]\n]+)\]/i);
+  if (!match) return null;
+  const title = match[1].trim();
+  if (!title) return null;
+  return title.length > TASK_TITLE_MAX_LEN
+    ? `${title.slice(0, TASK_TITLE_MAX_LEN)}…`
+    : title;
+}
+
+function buildTitlePromptSuffix() {
+  return [
+    '',
+    '【任务标题】',
+    '请在回复末尾单独一行输出本任务的简短标题（不超过20字），格式：[TITLE:你的标题]',
+    '标题应概括任务目标，不要用整段需求原文。',
+  ].join('\n');
+}
+
 function buildDevPromptSuffix(workdirs) {
   const dirs = Array.isArray(workdirs) ? workdirs.filter((entry) => entry?.path) : [];
   const lines = [
@@ -263,11 +284,16 @@ function buildDevPromptSuffix(workdirs) {
   if (dirs.length > 1) {
     lines.splice(2, 0, '- 可在以上多个工作目录范围内同步修改（如前后端联动）');
   }
+  lines.push(buildTitlePromptSuffix());
   return lines.join('\n');
 }
 
 function appendDevSuffix(prompt, workdirs) {
   return `${String(prompt || '').trim()}\n${buildDevPromptSuffix(workdirs)}`;
+}
+
+function appendTitleSuffix(prompt) {
+  return `${String(prompt || '').trim()}\n${buildTitlePromptSuffix()}`;
 }
 
 function statusForPhase(phase) {
@@ -302,8 +328,10 @@ module.exports = {
   MAX_TEST_RETRIES,
   MAX_MARKER_RETRIES,
   MISSING_MARKER_ERROR,
+  TASK_TITLE_MAX_LEN,
   PHASE_STATUS,
   parseTestResult,
+  parseTaskTitleMarker,
   inferTestOutcomeFromOutput,
   buildTestPrompt,
   buildMissingMarkerPrompt,
@@ -312,7 +340,9 @@ module.exports = {
   parseGitCommitResult,
   buildDeployPrompt,
   buildDeployRepairPrompt,
+  buildTitlePromptSuffix,
   appendDevSuffix,
+  appendTitleSuffix,
   statusForPhase,
   isPipelineRunningStatus,
   isActiveTaskStatus,

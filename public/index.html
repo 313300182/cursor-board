@@ -220,7 +220,11 @@
       border-color:var(--st-queued);
       box-shadow:0 0 0 1px color-mix(in srgb,var(--st-queued) 35%,transparent);
     }
+    .card-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center}
+    .card-tags .badge,.card-tags .status-chip{margin-top:0}
     .badge{display:inline-block;font-size:11px;font-weight:500;padding:2px 7px;border-radius:99px;margin-top:7px;background:var(--surface-hover);color:var(--text-2)}
+    .badge.template{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent)}
+    .badge.model{background:color-mix(in srgb,var(--st-running) 14%,transparent);color:var(--st-running)}
     .queue-next{background:color-mix(in srgb,var(--st-queued) 14%,transparent);color:var(--st-queued)}
     .complex{background:color-mix(in srgb,var(--st-complex) 14%,transparent);color:var(--st-complex)}
     .pipeline{background:color-mix(in srgb,var(--st-done) 14%,transparent);color:var(--st-done)}
@@ -245,8 +249,55 @@
     .markdown li{margin:3px 0}
     .markdown code{background:var(--surface-hover);padding:1px 4px;border-radius:4px;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px}
     .markdown strong{font-weight:600;color:var(--text)}
-    .rule{border-top:1px solid var(--border);padding-top:10px;margin-top:10px}
-    .rule summary{cursor:pointer;font-weight:600}
+    .rules-modal-panel{display:flex;flex-direction:column;overflow:hidden}
+    .rules-modal-header{padding:18px 18px 12px;border-bottom:1px solid var(--border)}
+    .rules-modal-header h3{margin:0 0 4px}
+    .rules-modal-header .muted{margin:0}
+    .rules-modal-body{
+      display:grid;
+      grid-template-columns:minmax(240px,300px) minmax(0,1fr);
+      gap:0;
+      min-height:0;
+      flex:1;
+      overflow:hidden;
+    }
+    .rules-list{
+      border-right:1px solid var(--border);
+      background:var(--surface-2);
+      overflow:auto;
+      min-height:0;
+    }
+    .rules-list-item{
+      display:block;
+      width:100%;
+      text-align:left;
+      padding:10px 12px;
+      border:none;
+      border-bottom:1px solid var(--border);
+      border-radius:0;
+      background:transparent;
+      color:inherit;
+      cursor:pointer;
+    }
+    .rules-list-item:hover{background:var(--surface-hover)}
+    .rules-list-item.active{background:var(--accent-subtle);box-shadow:inset 2px 0 0 var(--accent)}
+    .rules-list-item .name{font-weight:600;font-size:13px;line-height:1.35;word-break:break-word}
+    .rules-list-item .desc{font-size:11px;color:var(--text-3);margin-top:3px;line-height:1.35}
+    .rules-list-item .meta{font-size:10px;color:var(--text-3);margin-top:4px;word-break:break-all;font-family:"JetBrains Mono",ui-monospace,monospace}
+    .rules-detail{
+      padding:14px 16px;
+      overflow:auto;
+      min-height:0;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+    .rules-detail-header{display:flex;flex-direction:column;gap:4px}
+    .rules-detail-header h4{margin:0;font-size:15px;font-weight:600}
+    .rules-detail-header .meta{margin:0;font-size:11px}
+    .rules-detail .markdown{flex:1;min-height:0;max-height:none;overflow:auto}
+    .rules-empty{padding:28px 16px;color:var(--text-2);font-size:13px;text-align:center}
+    .rules-modal-actions{padding:12px 18px;border-top:1px solid var(--border);display:flex;justify-content:flex-end}
     .switch-row{display:flex;align-items:center;justify-content:space-between;margin-top:14px}
     .switch{position:relative;width:44px;height:24px}
     .switch input{opacity:0;width:0;height:0}
@@ -296,10 +347,6 @@
     .template-card:hover{background:var(--surface-hover);border-color:var(--border-strong)}
     .template-card.active{border-color:var(--accent);background:var(--accent-subtle)}
     .template-card .name{font-weight:600;font-size:12px;line-height:1.3}
-    .rule-section summary{cursor:pointer;font-weight:600;margin-bottom:8px}
-    .rule-section summary::-webkit-details-marker{display:none}
-    .rule-section summary::before{content:"▸ ";color:var(--text-2);font-size:11px}
-    .rule-section[open] summary::before{content:"▾ "}
     .variable-fields{margin-top:4px}
     .field-block{margin-bottom:4px}
     .field-toolbar{display:flex;align-items:center;justify-content:space-between;margin:11px 0 6px}
@@ -310,23 +357,27 @@
     .image-preview{position:relative;width:72px;height:72px;border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;background:var(--bg)}
     .image-preview img{width:100%;height:100%;object-fit:cover;display:block}
     .image-preview button{position:absolute;top:2px;right:2px;width:20px;height:20px;padding:0;border-radius:50%;font-size:12px;line-height:1;background:rgba(0,0,0,.6);color:var(--text);border:none}
-    .drawer-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:90}
-    .task-drawer{
-      position:fixed;
-      top:0;
-      right:0;
-      width:min(420px,92vw);
-      height:100vh;
-      background:var(--surface);
-      border-left:1px solid var(--border);
-      z-index:100;
+    .task-detail-panel{display:flex;flex-direction:column;overflow:hidden}
+    .task-detail-header{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:12px;
+      padding:18px 18px 12px;
+      border-bottom:1px solid var(--border);
+    }
+    .task-detail-header h3{margin:0 0 4px;font-size:16px;line-height:1.4;font-weight:600}
+    .task-detail-header .meta{font-size:12px;color:var(--text-3);line-height:1.5}
+    .task-detail-body{
+      flex:1;
+      overflow:auto;
+      padding:16px 18px 18px;
       display:flex;
       flex-direction:column;
-      box-shadow:-4px 0 24px rgba(0,0,0,.25);
+      gap:14px;
     }
-    .task-drawer-header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:16px;border-bottom:1px solid var(--border)}
-    .task-drawer-header h3{margin:0;font-size:14px;line-height:1.4;font-weight:600}
-    .task-drawer-body{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+    .task-detail-actions{display:flex;flex-wrap:wrap;gap:8px}
+    .task-detail-actions button{font-size:12px;padding:6px 12px}
     .output-section{display:flex;flex-direction:column;gap:6px;min-height:0}
     .output-section h3{margin:0;font-size:13px;color:var(--text-2);font-weight:600}
     .log-stream,.summary-box{
@@ -337,9 +388,15 @@
       font-size:12px;
       overflow:auto;
     }
-    .log-stream{flex:1;min-height:180px;max-height:340px}
-    .summary-box{min-height:96px;max-height:220px;color:var(--text)}
+    .task-detail-panel .log-stream{min-height:200px;max-height:min(48vh,520px)}
+    .task-detail-panel .summary-box{min-height:72px;max-height:min(32vh,320px);color:var(--text)}
     .summary-box.placeholder{color:var(--text-3);font-style:italic}
+    .iteration-round{display:flex;flex-direction:column;gap:12px}
+    .iteration-round+.iteration-round{margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}
+    .iteration-round-label{font-size:11px;font-weight:600;color:var(--text-2);letter-spacing:.02em;text-transform:uppercase}
+    .iteration-round .output-section h3{font-size:12px}
+    #taskDetailRounds{display:flex;flex-direction:column;gap:4px}
+    .task-detail-conversation{display:flex;flex-direction:column;gap:12px;margin-top:2px;padding-top:14px;border-top:1px solid var(--border)}
     .log-chunk{white-space:pre-wrap;overflow-wrap:break-word;margin:0}
     .log-chunk+.log-chunk{margin-top:8px;padding-top:8px;border-top:1px dashed var(--border)}
     .log-chunk-thinking{color:var(--st-complex);border-left:2px solid var(--st-complex);padding-left:8px}
@@ -351,7 +408,7 @@
     .log-chunk-message code{background:var(--surface-hover);padding:1px 4px;border-radius:4px;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px}
     .log-chunk-message strong{font-weight:600;color:var(--text)}
     .log-chunk-system{color:var(--st-queued);font-size:11px;white-space:pre-wrap}
-    .drawer-close{padding:4px 10px;font-size:12px}
+    .task-detail-close{padding:4px 10px;font-size:12px;flex-shrink:0}
     .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:110;display:flex;align-items:center;justify-content:center;padding:16px}
     .modal-panel{
       background:var(--surface);
@@ -364,6 +421,15 @@
     .modal-panel h3{margin:0 0 6px;font-size:16px;font-weight:600}
     .modal-panel .muted{margin-bottom:12px;font-size:12px}
     .modal-panel.modal-wide{width:min(640px,96vw)}
+    .modal-panel.rules-modal-panel,
+    .modal-panel.task-detail-panel{
+      width:min(1200px,calc(100vw - 48px));
+      max-height:min(90vh,900px);
+      padding:0;
+      display:flex;
+      flex-direction:column;
+      overflow:hidden;
+    }
     .modal-section{margin-top:16px;padding-top:14px;border-top:1px solid var(--border)}
     .modal-section:first-of-type{margin-top:0;padding-top:0;border-top:none}
     .modal-section h4{margin:0 0 10px;font-size:13px;font-weight:600;color:var(--text-2)}
@@ -404,6 +470,15 @@
     #logBox{min-height:120px}
     .error{color:var(--st-failed);font-size:13px;margin-top:8px}
     @media(max-width:1250px){.project-layout{grid-template-columns:1fr}.projects-layout{grid-template-columns:1fr}}
+    @media(max-width:760px){
+      .modal-panel.rules-modal-panel,
+      .modal-panel.task-detail-panel{width:min(100%,calc(100vw - 24px));max-height:92vh}
+      .rules-modal-body{grid-template-columns:1fr}
+      .rules-list{border-right:none;border-bottom:1px solid var(--border);max-height:min(34vh,260px)}
+      .rules-detail{min-height:min(42vh,360px)}
+      .task-detail-panel .log-stream{max-height:min(40vh,360px)}
+      .task-detail-panel .summary-box{max-height:min(28vh,240px)}
+    }
     @media(prefers-reduced-motion:reduce){
       *,*::before,*::after{
         transition-duration:0.01ms!important;
@@ -458,7 +533,7 @@
         <h2>新建任务</h2>
         <div id="titlePreviewGroup">
           <label>任务标题</label>
-          <div id="titlePreview" class="muted" style="font-size:13px;line-height:1.5;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface-2)">填写任务描述后自动生成</div>
+          <div id="titlePreview" class="muted" style="font-size:13px;line-height:1.5;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface-2)">填写任务描述后预览，执行时 AI 将总结正式标题</div>
         </div>
         <div id="titleInputGroup" class="hidden">
           <label>标题 <span class="muted">(可选，留空则自动总结)</span></label>
@@ -487,13 +562,14 @@
         <label>执行模型</label><select id="modelSelect"></select>
         <button id="createTaskBtn" class="primary" style="width:100%;margin-top:14px">提交到项目队列</button>
         <div id="taskError" class="error"></div>
-        <div id="rulesPanel" style="margin-top:20px"><h3>Cursor Rules</h3><div class="muted">加载中...</div></div>
       </aside>
 
       <main class="panel">
         <div class="toolbar" style="justify-content:space-between;margin-bottom:12px">
           <div><h2 id="projectHeading">任务看板</h2><div id="projectPath" class="muted"></div></div>
           <div class="toolbar">
+            <button type="button" id="rulesBtn" class="hidden">Cursor Rules</button>
+            <button type="button" id="skillsBtn" class="hidden">Cursor Skills</button>
             <button type="button" id="projectConfigBtn" class="hidden">项目配置</button>
             <button id="refreshBtn">刷新</button>
           </div>
@@ -518,6 +594,32 @@
         </div>
       </main>
     </section>
+  </div>
+
+  <div id="rulesModal" class="modal-backdrop hidden">
+    <div class="modal-panel rules-modal-panel" role="dialog" aria-labelledby="rulesModalTitle">
+      <div class="rules-modal-header">
+        <h3 id="rulesModalTitle">Cursor Rules</h3>
+        <p id="rulesModalSummary" class="muted">加载中…</p>
+      </div>
+      <div id="rulesModalBody" class="rules-modal-body"></div>
+      <div class="rules-modal-actions">
+        <button type="button" id="rulesModalCloseBtn">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="skillsModal" class="modal-backdrop hidden">
+    <div class="modal-panel rules-modal-panel" role="dialog" aria-labelledby="skillsModalTitle">
+      <div class="rules-modal-header">
+        <h3 id="skillsModalTitle">Cursor Skills</h3>
+        <p id="skillsModalSummary" class="muted">加载中…</p>
+      </div>
+      <div id="skillsModalBody" class="rules-modal-body"></div>
+      <div class="rules-modal-actions">
+        <button type="button" id="skillsModalCloseBtn">关闭</button>
+      </div>
+    </div>
   </div>
 
   <div id="projectConfigModal" class="modal-backdrop hidden">
@@ -583,13 +685,20 @@
     </form>
   </div>
 
-  <div id="drawerBackdrop" class="drawer-backdrop hidden"></div>
   <div id="iterateModal" class="modal-backdrop hidden">
     <div class="modal-panel" role="dialog" aria-labelledby="iterateModalTitle">
       <h3 id="iterateModalTitle">迭代任务</h3>
-      <p class="muted">基于已完成任务的对话上下文继续优化，将自动继承原任务的模型与流水线设置。</p>
+      <p class="muted">基于当前任务的对话上下文继续优化，将自动继承原任务的模型与流水线设置，不会新建任务卡片。</p>
       <label for="iterateRequirement">优化需求</label>
       <textarea id="iterateRequirement" rows="8" placeholder="描述要优化或改进的内容、验收标准等"></textarea>
+      <div id="iterateGitCommitRow" class="switch-row hidden">
+        <div><strong>提交 Git</strong><div class="muted" style="font-size:11px">测试通过后自动 commit（可选 push）</div></div>
+        <label class="switch"><input id="iterateGitCommitInput" type="checkbox" checked><span class="slider"></span></label>
+      </div>
+      <div id="iterateGitPushRow" class="switch-row hidden">
+        <div><strong>提交后推送</strong><div class="muted" style="font-size:11px">Git 提交成功后自动 push</div></div>
+        <label class="switch"><input id="iterateGitPushInput" type="checkbox" checked><span class="slider"></span></label>
+      </div>
       <div id="iterateError" class="error"></div>
       <div class="modal-actions">
         <button type="button" id="iterateCancelBtn">取消</button>
@@ -597,26 +706,22 @@
       </div>
     </div>
   </div>
-  <aside id="taskDrawer" class="task-drawer hidden">
-    <div class="task-drawer-header">
-      <div>
-        <h3 id="drawerTitle">任务</h3>
-        <div id="drawerMeta" class="meta"></div>
+  <div id="taskDetailModal" class="modal-backdrop hidden">
+    <div class="modal-panel task-detail-panel" role="dialog" aria-labelledby="taskDetailTitle">
+      <div class="task-detail-header">
+        <div>
+          <h3 id="taskDetailTitle">任务</h3>
+          <div id="taskDetailMeta" class="meta"></div>
+        </div>
+        <button type="button" id="taskDetailCloseBtn" class="task-detail-close">关闭</button>
       </div>
-      <button type="button" id="drawerCloseBtn" class="drawer-close">关闭</button>
+      <div class="task-detail-body">
+        <div id="taskDetailToolbar"></div>
+        <div id="taskDetailRounds"></div>
+        <div id="taskDetailConversation" class="task-detail-conversation"></div>
+      </div>
     </div>
-    <div class="task-drawer-body">
-      <div id="drawerDetail"></div>
-      <section class="output-section">
-        <h3>结果摘要</h3>
-        <div id="drawerSummaryBox" class="summary-box markdown placeholder"></div>
-      </section>
-      <section class="output-section">
-        <h3>实时输出</h3>
-        <div id="drawerLiveBox" class="log-stream"></div>
-      </section>
-    </div>
-  </aside>
+  </div>
 
   <script src="/task-display.js"></script>
   <script>
@@ -624,8 +729,9 @@
     const state = {
       token: localStorage.getItem('cursorBoardToken') || '',
       projectId: params.get('project'),
-      project: null, projects: [], tasks: [], templates: [], rules: [],
-      selectedId: null, logChunks: {}, models: { options: [] }, fieldImages: {},
+      project: null, projects: [], tasks: [], templates: [], rules: [], selectedRuleIndex: 0,
+      skills: [], selectedSkillIndex: 0,
+      selectedId: null, logChunks: {}, taskEvents: {}, models: { options: [] }, fieldImages: {},
       doneExpanded: false, archivedTasks: [], showArchived: false,
       iterateSourceId: null,
       eventSource: null,
@@ -941,6 +1047,10 @@
     }
 
     const TITLE_MAX_LEN=48;
+    const PROVISIONAL_TITLE_MAX_LEN=28;
+    function firstMeaningfulLine(text){
+      return String(text||'').replace(/\r\n/g,'\n').split('\n').map(line=>line.trim()).filter(Boolean)[0]||'';
+    }
     function normalizeTitleText(text){
       return String(text||'').replace(/\r\n/g,'\n').split('\n').map(line=>line.trim()).filter(Boolean).join(' · ');
     }
@@ -960,10 +1070,13 @@
     function deriveTaskTitle(template,variables,explicitTitle){
       const trimmed=String(explicitTitle||'').trim();
       if(trimmed)return trimmed.slice(0,120);
-      const primary=normalizeTitleText(pickPrimaryVariable(template,variables));
-      if(primary){
-        const summary=primary.length>TITLE_MAX_LEN?`${primary.slice(0,TITLE_MAX_LEN)}…`:primary;
+      const firstLine=firstMeaningfulLine(pickPrimaryVariable(template,variables));
+      if(firstLine){
         const prefix=template?.name?`${template.name} · `:'';
+        if(firstLine.length>PROVISIONAL_TITLE_MAX_LEN){
+          return `${prefix}待总结`.slice(0,120);
+        }
+        const summary=firstLine.length>TITLE_MAX_LEN?`${firstLine.slice(0,TITLE_MAX_LEN)}…`:firstLine;
         return `${prefix}${summary}`.slice(0,120);
       }
       return template?.name||'未命名任务';
@@ -1010,10 +1123,13 @@
       parseTaskLogEvents,
       appendLogChunk,
       appendPermissionChunk,
-      resolveTaskSummary,
+      parseTaskDisplayRounds,
+      renderTaskRoundsHtml,
       limitDoneTasksForDisplay,
       renderLogChunksHtml,
       isActiveTaskStatus,
+      isTerminalTaskStatus,
+      isIterableTaskStatus,
     } = window.TaskDisplay;
 
     function renderTaskCard(task, options = {}) {
@@ -1031,13 +1147,16 @@
       return `
         <div class="card ${task.id === state.selectedId ? 'active' : ''}" data-task="${task.id}">
           <div class="card-title">${escapeHtml(task.title)}</div>
-          <div class="meta">${escapeHtml(templateName(task.template))} · ${escapeHtml(modelName(task.model_id))}</div>
-          ${phaseChip}${waitChip}${failChip}
-          ${queueHead ? '<span class="badge queue-next">队首</span>' : ''}
-          ${task.pipeline_mode ? '<span class="badge pipeline">流水线</span>' : ''}
-          ${task.git_commit ? '<span class="badge">Git</span>' : ''}
-          ${task.is_complex ? '<span class="badge complex">复杂</span>' : ''}
-          ${archivedBadge}
+          <div class="card-tags">
+            <span class="badge template">${escapeHtml(templateName(task.template))}</span>
+            <span class="badge model">${escapeHtml(modelName(task.model_id))}</span>
+            ${phaseChip}${waitChip}${failChip}
+            ${queueHead ? '<span class="badge queue-next">队首</span>' : ''}
+            ${task.pipeline_mode ? '<span class="badge pipeline">流水线</span>' : ''}
+            ${task.git_commit ? '<span class="badge">Git</span>' : ''}
+            ${task.is_complex ? '<span class="badge complex">复杂</span>' : ''}
+            ${archivedBadge}
+          </div>
         </div>`;
     }
 
@@ -1059,7 +1178,7 @@
         method: 'POST',
         body: JSON.stringify({ projectId: state.projectId, ids }),
       });
-      if (state.selectedId && ids.includes(state.selectedId)) closeDrawer();
+      if (state.selectedId && ids.includes(state.selectedId)) closeTaskDetail();
       await refreshTasks();
       if (state.showArchived) await loadArchivedTasks();
       return result;
@@ -1117,20 +1236,22 @@
         : '';
     }
 
-    function renderLiveLog(chunks){
-      const box=$('drawerLiveBox');
-      if(!box)return;
-      box.innerHTML=renderLogChunksHtml(chunks);
-      box.scrollTop=box.scrollHeight;
+    function buildTaskDisplayRounds(task){
+      const events=state.taskEvents[task.id]||[];
+      const rounds=parseTaskDisplayRounds(events,task);
+      if(rounds.length){
+        rounds[rounds.length-1].chunks=state.logChunks[task.id]||rounds[rounds.length-1].chunks;
+      }
+      return rounds;
     }
 
-    function renderSummary(task){
-      const box=$('drawerSummaryBox');
-      if(!box)return;
-      const summary=resolveTaskSummary(task);
-      const hasSummary=Boolean(String(task?.result_summary||'').trim());
-      box.classList.toggle('placeholder',!hasSummary);
-      box.innerHTML=hasSummary?markdown(summary):escapeHtml(summary);
+    function renderTaskRounds(task){
+      const box=$('taskDetailRounds');
+      if(!box||!task)return;
+      box.innerHTML=renderTaskRoundsHtml(buildTaskDisplayRounds(task),task);
+      const streams=box.querySelectorAll('.log-stream');
+      const last=streams[streams.length-1];
+      if(last)last.scrollTop=last.scrollHeight;
     }
 
     function formatProjectWorkdirs(project){
@@ -1238,11 +1359,13 @@
           })
         });
         state.rules=await api(`/api/projects/${state.projectId}/rules`);
+        state.skills=await api(`/api/projects/${state.projectId}/skills`);
         $('projectPath').textContent=formatProjectWorkdirs(state.project);
         renderTaskWorkdirOptions();
         renderProjectDeploy();
         renderGitCommitOptions();
         renderRules();
+        renderSkills();
         closeProjectConfigModal();
       }catch(error){
         $('projectConfigError').textContent=error.message;
@@ -1361,7 +1484,7 @@
       });
       renderProblemSection();
       document.querySelectorAll('[data-task]').forEach(card=>card.onclick=()=>selectTask(card.dataset.task));
-      if(state.selectedId)renderDrawer();
+      if(state.selectedId)renderTaskDetail();
     }
 
     async function loadProject(){
@@ -1371,6 +1494,7 @@
       state.doneExpanded=false;
       state.showArchived=false;
       state.rules=await api(`/api/projects/${state.projectId}/rules`);
+      state.skills=await api(`/api/projects/${state.projectId}/skills`);
       $('pageTitle').textContent=state.project.name;
       $('projectHeading').textContent=state.project.name;
       $('projectPath').textContent=formatProjectWorkdirs(state.project);
@@ -1381,13 +1505,15 @@
       renderTemplateOptions();
       renderTemplateFields();
       renderModelOptions();
-      renderRules();renderBoard();updateQueue();
+      renderRules();renderSkills();renderBoard();updateQueue();
     }
 
     function renderProjectDeploy(){
       const machine=state.project.type==='machine';
       $('projectActionsBar').classList.toggle('hidden',machine);
       $('projectConfigBtn').classList.toggle('hidden',machine);
+      $('rulesBtn').classList.toggle('hidden',machine);
+      $('skillsBtn').classList.toggle('hidden',machine);
       if(machine)return;
       const pending=state.tasks.filter(task=>task.status==='pending_deploy').length;
       const status=state.project.deploy_status||'idle';
@@ -1439,16 +1565,160 @@
       }
     }
 
+    function ruleDescription(rule){
+      const description=String(rule.metadata?.description||'').trim();
+      return description||rule.name.replace(/\.mdc$/i,'');
+    }
+
+    function renderRuleDetail(rule){
+      if(!rule){
+        return '<div class="rules-empty">从左侧选择一条 Rule 查看内容</div>';
+      }
+      const metaParts=[rule.relativePath];
+      if(rule.workdirLabel)metaParts.push(rule.workdirLabel);
+      if(rule.metadata?.globs)metaParts.push(`globs: ${rule.metadata.globs}`);
+      return `
+        <div class="rules-detail-header">
+          <h4>${escapeHtml(rule.name)}</h4>
+          <div class="meta">${escapeHtml(metaParts.join(' · '))}</div>
+        </div>
+        <div class="markdown">${markdown(rule.content)}</div>`;
+    }
+
+    function renderRulesModalContent(){
+      const summary=$('rulesModalSummary');
+      const body=$('rulesModalBody');
+      if(!summary||!body)return;
+      if(state.project?.type==='machine'){
+        summary.textContent='本机项目不绑定仓库 Rules。';
+        body.innerHTML='<div class="rules-empty">本机项目不扫描 .cursor/rules。</div>';
+        return;
+      }
+      if(!state.rules.length){
+        summary.textContent='未发现 .cursor/rules 下的 .mdc 文件';
+        body.innerHTML='<div class="rules-empty">在项目工作目录的 .cursor/rules 下添加 .mdc 规则文件后刷新即可。</div>';
+        return;
+      }
+      if(state.selectedRuleIndex>=state.rules.length)state.selectedRuleIndex=0;
+      const selected=state.rules[state.selectedRuleIndex];
+      summary.textContent=`共 ${state.rules.length} 条规则 · 来自 ${new Set(state.rules.map(rule=>rule.workdirLabel||rule.workdir||'')).size} 个工作目录`;
+      body.innerHTML=`
+        <div class="rules-list" role="listbox" aria-label="Rules 列表">
+          ${state.rules.map((rule,index)=>`
+            <button type="button" class="rules-list-item ${index===state.selectedRuleIndex?'active':''}" data-rule-index="${index}">
+              <div class="name">${escapeHtml(rule.name)}</div>
+              <div class="desc">${escapeHtml(ruleDescription(rule))}</div>
+              <div class="meta">${escapeHtml(rule.relativePath)}${rule.workdirLabel?` · ${escapeHtml(rule.workdirLabel)}`:''}</div>
+            </button>`).join('')}
+        </div>
+        <div class="rules-detail">${renderRuleDetail(selected)}</div>`;
+      body.querySelectorAll('[data-rule-index]').forEach(button=>{
+        button.onclick=()=>{
+          state.selectedRuleIndex=Number(button.dataset.ruleIndex);
+          renderRulesModalContent();
+        };
+      });
+    }
+
     function renderRules(){
-      $('rulesPanel').innerHTML=`<details class="rule-section">
-        <summary>Cursor Rules <span class="badge">${state.rules.length}</span></summary>`+
-        (state.project.type==='machine'?'<p class="muted">本机项目不绑定仓库 Rules。</p>':
-        state.rules.length?state.rules.map(rule=>`
-          <details class="rule"><summary>${escapeHtml(rule.name)}</summary>
-            <div class="meta">${escapeHtml(rule.relativePath)}${rule.workdirLabel?` · ${escapeHtml(rule.workdirLabel)}`:''}</div>
-            <div class="markdown">${markdown(rule.content)}</div>
-          </details>`).join(''):'<p class="muted">未发现 .cursor/rules/*.mdc</p>')+
-        `</details>`;
+      const button=$('rulesBtn');
+      if(button&&!state.project?.type){
+        button.textContent='Cursor Rules';
+      }else if(button&&state.project?.type!=='machine'){
+        button.textContent=state.rules.length?`Cursor Rules (${state.rules.length})`:'Cursor Rules';
+      }
+      renderRulesModalContent();
+    }
+
+    function openRulesModal(){
+      if(!state.project||state.project.type==='machine')return;
+      if(state.selectedRuleIndex>=state.rules.length)state.selectedRuleIndex=0;
+      renderRulesModalContent();
+      $('rulesModal').classList.remove('hidden');
+    }
+
+    function closeRulesModal(){
+      $('rulesModal').classList.add('hidden');
+    }
+
+    function skillDisplayName(skill){
+      const name=String(skill.metadata?.name||'').trim();
+      return name||skill.name;
+    }
+
+    function skillDescription(skill){
+      const description=String(skill.metadata?.description||'').trim();
+      return description||skill.name;
+    }
+
+    function renderSkillDetail(skill){
+      if(!skill){
+        return '<div class="rules-empty">从左侧选择一个 Skill 查看内容</div>';
+      }
+      const metaParts=[skill.relativePath];
+      if(skill.workdirLabel)metaParts.push(skill.workdirLabel);
+      return `
+        <div class="rules-detail-header">
+          <h4>${escapeHtml(skillDisplayName(skill))}</h4>
+          <div class="meta">${escapeHtml(metaParts.join(' · '))}</div>
+        </div>
+        <div class="markdown">${markdown(skill.content)}</div>`;
+    }
+
+    function renderSkillsModalContent(){
+      const summary=$('skillsModalSummary');
+      const body=$('skillsModalBody');
+      if(!summary||!body)return;
+      if(state.project?.type==='machine'){
+        summary.textContent='本机项目不绑定仓库 Skills。';
+        body.innerHTML='<div class="rules-empty">本机项目不扫描 .cursor/skills。</div>';
+        return;
+      }
+      if(!state.skills.length){
+        summary.textContent='未发现 .cursor/skills 下的 SKILL.md 文件';
+        body.innerHTML='<div class="rules-empty">在项目工作目录的 .cursor/skills 下添加 SKILL.md 后刷新即可。</div>';
+        return;
+      }
+      if(state.selectedSkillIndex>=state.skills.length)state.selectedSkillIndex=0;
+      const selected=state.skills[state.selectedSkillIndex];
+      summary.textContent=`共 ${state.skills.length} 个 Skill · 来自 ${new Set(state.skills.map(skill=>skill.workdirLabel||skill.workdir||'')).size} 个工作目录`;
+      body.innerHTML=`
+        <div class="rules-list" role="listbox" aria-label="Skills 列表">
+          ${state.skills.map((skill,index)=>`
+            <button type="button" class="rules-list-item ${index===state.selectedSkillIndex?'active':''}" data-skill-index="${index}">
+              <div class="name">${escapeHtml(skillDisplayName(skill))}</div>
+              <div class="desc">${escapeHtml(skillDescription(skill))}</div>
+              <div class="meta">${escapeHtml(skill.relativePath)}${skill.workdirLabel?` · ${escapeHtml(skill.workdirLabel)}`:''}</div>
+            </button>`).join('')}
+        </div>
+        <div class="rules-detail">${renderSkillDetail(selected)}</div>`;
+      body.querySelectorAll('[data-skill-index]').forEach(button=>{
+        button.onclick=()=>{
+          state.selectedSkillIndex=Number(button.dataset.skillIndex);
+          renderSkillsModalContent();
+        };
+      });
+    }
+
+    function renderSkills(){
+      const button=$('skillsBtn');
+      if(button&&!state.project?.type){
+        button.textContent='Cursor Skills';
+      }else if(button&&state.project?.type!=='machine'){
+        button.textContent=state.skills.length?`Cursor Skills (${state.skills.length})`:'Cursor Skills';
+      }
+      renderSkillsModalContent();
+    }
+
+    function openSkillsModal(){
+      if(!state.project||state.project.type==='machine')return;
+      if(state.selectedSkillIndex>=state.skills.length)state.selectedSkillIndex=0;
+      renderSkillsModalContent();
+      $('skillsModal').classList.remove('hidden');
+    }
+
+    function closeSkillsModal(){
+      $('skillsModal').classList.add('hidden');
     }
 
     async function createTask(){
@@ -1482,26 +1752,27 @@
       if(state.showArchived)await loadArchivedTasks();
       renderBoard();
       renderProjectDeploy();
-      if(state.selectedId)renderDrawer();
+      if(state.selectedId)renderTaskDetail();
     }
     async function selectTask(id){
       state.selectedId=id;
       const events=await api(`/api/tasks/${id}/events`);
-      state.logChunks[id]=parseTaskLogEvents(events);
+      state.taskEvents[id]=events;
+      const task=state.tasks.find(item=>item.id===id);
+      const rounds=parseTaskDisplayRounds(events,task);
+      state.logChunks[id]=rounds.length?rounds[rounds.length-1].chunks:[];
       renderBoard();
-      openDrawer();
+      openTaskDetail();
     }
 
-    function openDrawer(){
-      $('taskDrawer').classList.remove('hidden');
-      $('drawerBackdrop').classList.remove('hidden');
-      renderDrawer();
+    function openTaskDetail(){
+      $('taskDetailModal').classList.remove('hidden');
+      renderTaskDetail();
     }
 
-    function closeDrawer(){
+    function closeTaskDetail(){
       state.selectedId=null;
-      $('taskDrawer').classList.add('hidden');
-      $('drawerBackdrop').classList.add('hidden');
+      $('taskDetailModal').classList.add('hidden');
       renderBoard();
     }
 
@@ -1539,24 +1810,30 @@
         </div>`;
     }
 
-    function renderDrawer(){
+    function renderTaskDetail(){
       const task=state.tasks.find(item=>item.id===state.selectedId)
         ||state.archivedTasks.find(item=>item.id===state.selectedId);
       if(!task){
-        closeDrawer();
+        closeTaskDetail();
         return;
       }
-      $('drawerTitle').textContent=task.title;
-      $('drawerMeta').textContent=`${statusLabel(task.status)} · ${modelName(task.model_id)}${task.pipeline_phase?` · ${task.pipeline_phase}`:''}${formatTaskWorkdirs(task)?` · ${formatTaskWorkdirs(task)}`:''}`;
-      $('drawerDetail').innerHTML=`
-        ${renderSteerPanel(task)}
-        ${renderInteraction(task)}
-        ${task.error_message?`<div class="error">${escapeHtml(task.error_message)}</div>`:''}
-        ${['failed','needs_human'].includes(task.status)?'<button id="retryBtn">重新入队</button>':''}
-        ${task.status==='done'?'<button id="iterateBtn">迭代任务</button>':''}
-        ${!task.archived?'<button id="archiveBtn">归档</button>':''}`;
-      renderSummary(task);
-      renderLiveLog(state.logChunks[task.id]||[]);
+      $('taskDetailTitle').textContent=task.title;
+      $('taskDetailMeta').textContent=`${statusLabel(task.status)} · ${modelName(task.model_id)}${task.pipeline_phase?` · ${task.pipeline_phase}`:''}${formatTaskWorkdirs(task)?` · ${formatTaskWorkdirs(task)}`:''}`;
+      const actions=[
+        ['failed','needs_human'].includes(task.status)?'<button type="button" id="retryBtn">重新入队</button>':'',
+        isIterableTaskStatus(task.status)?'<button type="button" id="iterateBtn">迭代任务</button>':'',
+        !task.archived?'<button type="button" id="archiveBtn">归档</button>':'',
+      ].filter(Boolean);
+      const toolbarParts=[
+        task.error_message?`<div class="error">${escapeHtml(task.error_message)}</div>`:'',
+        actions.length?`<div class="task-detail-actions">${actions.join('')}</div>`:'',
+      ].filter(Boolean);
+      $('taskDetailToolbar').innerHTML=toolbarParts.join('');
+      $('taskDetailToolbar').classList.toggle('hidden',!toolbarParts.length);
+      renderTaskRounds(task);
+      const conversationHtml=`${renderSteerPanel(task)}${renderInteraction(task)}`;
+      $('taskDetailConversation').innerHTML=conversationHtml;
+      $('taskDetailConversation').classList.toggle('hidden',!conversationHtml.trim());
       const retry=$('retryBtn');
       if(retry)retry.onclick=async()=>{await api(`/api/tasks/${task.id}/retry`,{method:'POST'});await refreshTasks()};
       const iterateBtn=$('iterateBtn');
@@ -1616,10 +1893,39 @@
       }
     }
 
+    function renderIterateGitOptions(task){
+      const gitEnabled=Boolean(state.project?.git_enabled);
+      const pipeline=Boolean(task?.pipeline_mode);
+      const showGit=gitEnabled&&pipeline;
+      $('iterateGitCommitRow')?.classList.toggle('hidden',!showGit);
+      $('iterateGitPushRow')?.classList.toggle('hidden',!showGit);
+      if(!showGit){
+        if($('iterateGitCommitInput'))$('iterateGitCommitInput').checked=false;
+        if($('iterateGitPushInput'))$('iterateGitPushInput').checked=false;
+        return;
+      }
+      if($('iterateGitCommitInput')){
+        $('iterateGitCommitInput').checked=true;
+      }
+      if($('iterateGitPushInput')){
+        $('iterateGitPushInput').checked=true;
+      }
+    }
+
+    function syncIterateGitPushVisibility(){
+      const commit=$('iterateGitCommitInput')?.checked;
+      $('iterateGitPushRow')?.classList.toggle('hidden',!commit||$('iterateGitCommitRow')?.classList.contains('hidden'));
+      if(!commit&&$('iterateGitPushInput'))$('iterateGitPushInput').checked=false;
+    }
+
     function openIterateModal(taskId){
       state.iterateSourceId=taskId;
+      const task=state.tasks.find(item=>item.id===taskId)
+        ||state.archivedTasks.find(item=>item.id===taskId);
       $('iterateRequirement').value='';
       $('iterateError').textContent='';
+      renderIterateGitOptions(task);
+      syncIterateGitPushVisibility();
       $('iterateModal').classList.remove('hidden');
       $('iterateRequirement').focus();
     }
@@ -1638,19 +1944,28 @@
         return;
       }
       if(!state.iterateSourceId)return;
+      const sourceTask=state.tasks.find(item=>item.id===state.iterateSourceId)
+        ||state.archivedTasks.find(item=>item.id===state.iterateSourceId);
+      const showGit=Boolean(state.project?.git_enabled&&sourceTask?.pipeline_mode);
       $('iterateSubmitBtn').disabled=true;
       try{
+        const payload={requirement};
+        if(showGit){
+          payload.gitCommit=$('iterateGitCommitInput').checked;
+          payload.gitPush=$('iterateGitPushInput').checked;
+        }
         const task=await api(`/api/tasks/${state.iterateSourceId}/iterate`,{
           method:'POST',
-          body:JSON.stringify({requirement}),
+          body:JSON.stringify(payload),
         });
         closeIterateModal();
-        closeDrawer();
         state.selectedId=task.id;
         await refreshTasks();
         const events=await api(`/api/tasks/${task.id}/events`);
-        state.logChunks[task.id]=parseTaskLogEvents(events);
-        openDrawer();
+        state.taskEvents[task.id]=events;
+        const rounds=parseTaskDisplayRounds(events,task);
+        state.logChunks[task.id]=rounds.length?rounds[rounds.length-1].chunks:[];
+        openTaskDetail();
       }catch(error){
         $('iterateError').textContent=error.message;
       }finally{
@@ -1692,12 +2007,18 @@
       source.addEventListener('task:log',event=>{
         const payload=JSON.parse(event.data);
         state.logChunks[payload.id]=appendLogChunk(state.logChunks[payload.id],payload);
-        if(payload.id===state.selectedId)renderLiveLog(state.logChunks[payload.id]);
+        if(payload.id===state.selectedId){
+          const task=state.tasks.find(item=>item.id===payload.id);
+          if(task)renderTaskRounds(task);
+        }
       });
       source.addEventListener('task:permission',event=>{
         const payload=JSON.parse(event.data);
         state.logChunks[payload.id]=appendPermissionChunk(state.logChunks[payload.id],payload);
-        if(payload.id===state.selectedId)renderLiveLog(state.logChunks[payload.id]);
+        if(payload.id===state.selectedId){
+          const task=state.tasks.find(item=>item.id===payload.id);
+          if(task)renderTaskRounds(task);
+        }
       });
     }
 
@@ -1713,6 +2034,16 @@
       if(state.projectId){
         $('homeView').classList.add('hidden');$('projectView').classList.remove('hidden');$('homeBtn').classList.remove('hidden');
         $('createTaskBtn').onclick=createTask;$('refreshBtn').onclick=loadProject;
+        $('rulesBtn').onclick=openRulesModal;
+        $('rulesModalCloseBtn').onclick=closeRulesModal;
+        $('rulesModal').onclick=(event)=>{
+          if(event.target===$('rulesModal'))closeRulesModal();
+        };
+        $('skillsBtn').onclick=openSkillsModal;
+        $('skillsModalCloseBtn').onclick=closeSkillsModal;
+        $('skillsModal').onclick=(event)=>{
+          if(event.target===$('skillsModal'))closeSkillsModal();
+        };
         $('projectConfigBtn').onclick=openProjectConfigModal;
         $('projectConfigForm').onsubmit=saveProjectConfig;
         $('projectConfigCancelBtn').onclick=closeProjectConfigModal;
@@ -1722,10 +2053,13 @@
         $('deployProjectBtn').onclick=deployProject;
         $('approveDeployFixBtn').onclick=()=>respondDeployRepair(true);
         $('rejectDeployFixBtn').onclick=()=>respondDeployRepair(false);
-        $('drawerCloseBtn').onclick=closeDrawer;
-        $('drawerBackdrop').onclick=closeDrawer;
+        $('taskDetailCloseBtn').onclick=closeTaskDetail;
+        $('taskDetailModal').onclick=(event)=>{
+          if(event.target===$('taskDetailModal'))closeTaskDetail();
+        };
         $('iterateCancelBtn').onclick=closeIterateModal;
         $('iterateSubmitBtn').onclick=submitIteration;
+        $('iterateGitCommitInput')?.addEventListener('change',syncIterateGitPushVisibility);
         $('iterateModal').onclick=(event)=>{
           if(event.target===$('iterateModal'))closeIterateModal();
         };

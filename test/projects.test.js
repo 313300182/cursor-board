@@ -252,3 +252,47 @@ test('多目录项目会合并各目录下的 Cursor Rules', async () => {
   fs.rmSync(backendRoot, { recursive: true, force: true });
   fs.rmSync(frontendRoot, { recursive: true, force: true });
 });
+
+test('Skills 扫描递归读取 .cursor/skills 下的 SKILL.md 文件', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cursor-board-skills-'));
+  const skillDir = path.join(root, '.cursor', 'skills', 'java-style');
+  fs.mkdirSync(skillDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(skillDir, 'SKILL.md'),
+    '---\nname: java-style\ndescription: Java 代码风格\n---\n# Java 规范\n只使用 Java 8。',
+    'utf8',
+  );
+
+  const { scanProjectSkills, scanProjectSkillsForWorkdirs } = require('../project-skills');
+  const skills = await scanProjectSkills(root);
+
+  assert.equal(skills.length, 1);
+  assert.equal(skills[0].name, 'java-style');
+  assert.equal(skills[0].metadata.name, 'java-style');
+  assert.equal(skills[0].metadata.description, 'Java 代码风格');
+  assert.equal(skills[0].content, '# Java 规范\n只使用 Java 8。');
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('多目录项目会合并各目录下的 Cursor Skills', async () => {
+  const { scanProjectSkillsForWorkdirs } = require('../project-skills');
+  const backendRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cursor-board-backend-skills-'));
+  const frontendRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cursor-board-frontend-skills-'));
+  const backendSkill = path.join(backendRoot, '.cursor', 'skills', 'api');
+  const frontendSkill = path.join(frontendRoot, '.cursor', 'skills', 'ui');
+  fs.mkdirSync(backendSkill, { recursive: true });
+  fs.mkdirSync(frontendSkill, { recursive: true });
+  fs.writeFileSync(path.join(backendSkill, 'SKILL.md'), '---\nname: api\n---\n# API', 'utf8');
+  fs.writeFileSync(path.join(frontendSkill, 'SKILL.md'), '---\nname: ui\n---\n# UI', 'utf8');
+
+  const skills = await scanProjectSkillsForWorkdirs([
+    { label: '后端', path: backendRoot },
+    { label: '前端', path: frontendRoot },
+  ]);
+
+  assert.equal(skills.length, 2);
+  assert.ok(skills.some((skill) => skill.metadata.name === 'api' && skill.workdirLabel === '后端'));
+  assert.ok(skills.some((skill) => skill.metadata.name === 'ui' && skill.workdirLabel === '前端'));
+  fs.rmSync(backendRoot, { recursive: true, force: true });
+  fs.rmSync(frontendRoot, { recursive: true, force: true });
+});

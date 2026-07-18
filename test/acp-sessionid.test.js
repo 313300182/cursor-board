@@ -73,7 +73,8 @@ test('runPipelineTask Git 跳过提交时通过 activeRun.emit 写日志', async
       async prompt() {},
       getTurnSummary() {
         turn += 1;
-        if (turn === 1) return '测试通过\n[TEST:PASS]';
+        if (turn === 1) return '开发完成\n[TITLE:Git 跳过测试]';
+        if (turn === 2) return '测试通过\n[TEST:PASS]';
         return '无变更\n[GIT:SKIP]';
       },
       getSummary() {
@@ -99,5 +100,6 @@ test('runPipelineTask Git 跳过提交时通过 activeRun.emit 写日志', async
 
   assert.equal(result.awaitingDeploy, true);
   assert.equal(result.sessionId, 'sess-git-skip');
+  assert.equal(result.suggestedTitle, 'Git 跳过测试');
   assert.ok(logs.some((line) => line.includes('无变更，已跳过 Git 提交')));
 });

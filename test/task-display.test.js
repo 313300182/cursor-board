@@ -12,6 +12,10 @@ const {
   resolveTaskSummary,
   formatMarkdown,
   mergeLogChunksForDisplay,
+  LOG_LAZY_CHAR_THRESHOLD,
+  LOG_LAZY_TAIL_CHARS,
+  planLogLazyDisplay,
+  renderLogStreamHtml,
   renderLogChunksHtml,
   DONE_VISIBLE_DEFAULT,
   limitDoneTasksForDisplay,
@@ -209,6 +213,28 @@ test('renderTaskRoundsHtml 渲染多轮区块', () => {
   assert.match(html, /迭代 2/);
   assert.match(html, /hello/);
   assert.match(html, /world/);
+});
+
+test('planLogLazyDisplay 短内容全量展示，长内容默认只展示尾部', () => {
+  const shortChunks = [{ stream: 'message', text: '短输出' }];
+  const shortPlan = planLogLazyDisplay(shortChunks);
+  assert.equal(shortPlan.mode, 'full');
+  assert.equal(shortPlan.hasHidden, false);
+
+  const longText = 'x'.repeat(LOG_LAZY_CHAR_THRESHOLD + 500);
+  const longChunks = [{ stream: 'message', text: longText }];
+  const lazyPlan = planLogLazyDisplay(longChunks);
+  assert.equal(lazyPlan.mode, 'lazy');
+  assert.equal(lazyPlan.hasHidden, true);
+  assert.ok(lazyPlan.visibleChars <= LOG_LAZY_TAIL_CHARS);
+});
+
+test('renderLogStreamHtml 长日志渲染懒加载触发器', () => {
+  const longText = `EARLY_MARKER${'x'.repeat(LOG_LAZY_CHAR_THRESHOLD + 1000)}LATE_MARKER`;
+  const html = renderLogStreamHtml([{ stream: 'message', text: longText }]);
+  assert.match(html, /log-lazy-trigger/);
+  assert.doesNotMatch(html, /EARLY_MARKER/);
+  assert.match(html, /LATE_MARKER/);
 });
 
 test('已完成列默认只展示 7 条', () => {

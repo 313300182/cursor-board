@@ -395,10 +395,27 @@
       padding:10px;
       border-radius:var(--radius-lg);
       font-size:12px;
-      overflow:auto;
     }
-    .task-detail-panel .log-stream{min-height:200px;max-height:min(48vh,520px)}
-    .task-detail-panel .summary-box{min-height:72px;max-height:min(32vh,320px);color:var(--text)}
+    .task-detail-panel .log-stream,.task-detail-panel .summary-box{
+      overflow:visible;
+      max-height:none;
+      min-height:0;
+    }
+    .task-detail-panel .summary-box{color:var(--text)}
+    .log-lazy-trigger{
+      display:block;
+      width:100%;
+      margin:0 0 8px;
+      padding:8px 10px;
+      border:1px dashed var(--border);
+      border-radius:var(--radius);
+      background:var(--surface-2);
+      color:var(--text-2);
+      font-size:11px;
+      text-align:center;
+      cursor:pointer;
+    }
+    .log-lazy-trigger:hover{color:var(--text);background:var(--surface-hover)}
     .summary-box.placeholder{color:var(--text-3);font-style:italic}
     .iteration-round{display:flex;flex-direction:column;gap:12px}
     .iteration-round+.iteration-round{margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}
@@ -520,8 +537,6 @@
       .rules-modal-body{grid-template-columns:1fr}
       .rules-list{border-right:none;border-bottom:1px solid var(--border);max-height:min(34vh,260px)}
       .rules-detail{min-height:min(42vh,360px)}
-      .task-detail-panel .log-stream{max-height:min(40vh,360px)}
-      .task-detail-panel .summary-box{max-height:min(28vh,240px)}
     }
     @media(prefers-reduced-motion:reduce){
       *,*::before,*::after{
@@ -804,7 +819,7 @@
       projectId: params.get('project'),
       project: null, projects: [], tasks: [], templates: [], rules: [], selectedRuleIndex: 0,
       skills: [], selectedSkillIndex: 0,
-      selectedId: null, logChunks: {}, taskEvents: {}, models: { options: [] }, fieldImages: {},
+      selectedId: null, logChunks: {}, taskEvents: {}, taskLogVisibleChars: {}, models: { options: [] }, fieldImages: {},
       doneExpanded: false, archivedTasks: [], showArchived: false,
       iterateSourceId: null,
       chat: {
@@ -1327,13 +1342,92 @@
       return rounds;
     }
 
-    function renderTaskRounds(task){
+    function taskLogLazyKey(taskId,round){
+      return `${taskId}:${round}`;
+    }
+
+    function buildLogLazyOptions(task,rounds){
+      const lazyByRound={};
+      rounds.forEach(round=>{
+        const visibleChars=state.taskLogVisibleChars[taskLogLazyKey(task.id,round.round)];
+        if(visibleChars)lazyByRound[round.round]={visibleChars};
+      });
+      return lazyByRound;
+    }
+
+    function getTaskDetailBody(){
+      return document.querySelector('.task-detail-body');
+    }
+
+    function isNearScrollBottom(element,threshold=96){
+      if(!element)return true;
+      return element.scrollHeight-element.scrollTop-element.clientHeight<=threshold;
+    }
+
+    function expandTaskLogLazy(task,round){
+      const rounds=buildTaskDisplayRounds(task);
+      const target=rounds.find(item=>item.round===round);
+      if(!target)return false;
+      const key=taskLogLazyKey(task.id,round);
+      const current=state.taskLogVisibleChars[key]||TaskDisplay.LOG_LAZY_TAIL_CHARS;
+      const plan=TaskDisplay.planLogLazyDisplay(target.chunks,{visibleChars:current+TaskDisplay.LOG_LAZY_EXPAND_CHARS});
+      if(plan.mode==='full'){
+        const prev=state.taskLogVisibleChars[key];
+        state.taskLogVisibleChars[key]=plan.totalChars;
+        return prev!==plan.totalChars;
+      }
+      if(plan.visibleChars<=current)return false;
+      state.taskLogVisibleChars[key]=plan.visibleChars;
+      return true;
+    }
+
+    function bindTaskLogLazyTriggers(task){
       const box=$('taskDetailRounds');
       if(!box||!task)return;
-      box.innerHTML=renderTaskRoundsHtml(buildTaskDisplayRounds(task),task);
-      const streams=box.querySelectorAll('.log-stream');
-      const last=streams[streams.length-1];
-      if(last)last.scrollTop=last.scrollHeight;
+      box.querySelectorAll('.log-lazy-trigger').forEach(trigger=>{
+        trigger.onclick=()=>{
+          const round=Number(trigger.closest('.log-stream')?.dataset.round||trigger.closest('.iteration-round')?.dataset.round);
+          if(!round||!expandTaskLogLazy(task,round))return;
+          renderTaskRounds(task,{preserveScroll:true});
+        };
+      });
+    }
+
+    function onTaskDetailScroll(){
+      if(!state.selectedId)return;
+      const task=state.tasks.find(item=>item.id===state.selectedId)
+        ||state.archivedTasks.find(item=>item.id===state.selectedId);
+      if(!task)return;
+      const body=getTaskDetailBody();
+      const box=$('taskDetailRounds');
+      const trigger=box?.querySelector('.log-lazy-trigger');
+      if(!body||!trigger)return;
+      const triggerRect=trigger.getBoundingClientRect();
+      const bodyRect=body.getBoundingClientRect();
+      if(triggerRect.top>bodyRect.top+160)return;
+      const round=Number(trigger.closest('.log-stream')?.dataset.round||trigger.closest('.iteration-round')?.dataset.round);
+      if(!round||!expandTaskLogLazy(task,round))return;
+      renderTaskRounds(task,{preserveScroll:true});
+    }
+
+    function renderTaskRounds(task,{scrollToBottom=false,preserveScroll=false}={}){
+      const box=$('taskDetailRounds');
+      if(!box||!task)return;
+      const body=getTaskDetailBody();
+      const wasNearBottom=scrollToBottom||isNearScrollBottom(body);
+      const prevScrollTop=body?.scrollTop||0;
+      const prevScrollHeight=body?.scrollHeight||0;
+      const rounds=buildTaskDisplayRounds(task);
+      box.innerHTML=renderTaskRoundsHtml(rounds,task,{lazyByRound:buildLogLazyOptions(task,rounds)});
+      bindTaskLogLazyTriggers(task);
+      if(!body)return;
+      if(wasNearBottom){
+        body.scrollTop=body.scrollHeight;
+        return;
+      }
+      if(preserveScroll){
+        body.scrollTop=prevScrollTop+(body.scrollHeight-prevScrollHeight);
+      }
     }
 
     function formatProjectWorkdirs(project){
@@ -1867,7 +1961,7 @@
 
     function openTaskDetail(){
       $('taskDetailModal').classList.remove('hidden');
-      renderTaskDetail();
+      renderTaskDetail({scrollToBottom:true});
     }
 
     function closeTaskDetail(){
@@ -1910,7 +2004,7 @@
         </div>`;
     }
 
-    function renderTaskDetail(){
+    function renderTaskDetail({scrollToBottom=false}={}){
       const task=state.tasks.find(item=>item.id===state.selectedId)
         ||state.archivedTasks.find(item=>item.id===state.selectedId);
       if(!task){
@@ -1930,7 +2024,7 @@
       ].filter(Boolean);
       $('taskDetailToolbar').innerHTML=toolbarParts.join('');
       $('taskDetailToolbar').classList.toggle('hidden',!toolbarParts.length);
-      renderTaskRounds(task);
+      renderTaskRounds(task,{scrollToBottom});
       const conversationHtml=`${renderSteerPanel(task)}${renderInteraction(task)}`;
       $('taskDetailConversation').innerHTML=conversationHtml;
       $('taskDetailConversation').classList.toggle('hidden',!conversationHtml.trim());
@@ -2442,6 +2536,7 @@
         $('approveDeployFixBtn').onclick=()=>respondDeployRepair(true);
         $('rejectDeployFixBtn').onclick=()=>respondDeployRepair(false);
         $('taskDetailCloseBtn').onclick=closeTaskDetail;
+        getTaskDetailBody()?.addEventListener('scroll',onTaskDetailScroll,{passive:true});
         $('taskDetailModal').onclick=(event)=>{
           if(event.target===$('taskDetailModal'))closeTaskDetail();
         };

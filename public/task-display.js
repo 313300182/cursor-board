@@ -184,9 +184,89 @@
     return merged;
   }
 
+  const LOG_LAZY_CHAR_THRESHOLD = 12000;
+  const LOG_LAZY_TAIL_CHARS = 8000;
+  const LOG_LAZY_EXPAND_CHARS = 8000;
+
+  function estimateLogTextLength(chunks) {
+    return mergeLogChunksForDisplay(chunks)
+      .reduce((sum, chunk) => sum + (chunk.text?.length || 0), 0);
+  }
+
+  function sliceMergedLogTail(merged, tailChars) {
+    if (!merged.length) {
+      return { visible: [], hiddenChars: 0, hasHidden: false };
+    }
+    let budget = Math.max(0, tailChars);
+    const visible = [];
+    let hiddenChars = 0;
+    for (let index = merged.length - 1; index >= 0; index -= 1) {
+      const chunk = merged[index];
+      const text = chunk.text || '';
+      if (budget <= 0) {
+        hiddenChars += text.length;
+        continue;
+      }
+      if (text.length <= budget) {
+        visible.unshift({ stream: chunk.stream, text });
+        budget -= text.length;
+      } else {
+        const start = text.length - budget;
+        hiddenChars += start;
+        visible.unshift({ stream: chunk.stream, text: text.slice(start) });
+        budget = 0;
+      }
+    }
+    return { visible, hiddenChars, hasHidden: hiddenChars > 0 };
+  }
+
+  function planLogLazyDisplay(chunks, options = {}) {
+    const merged = mergeLogChunksForDisplay(chunks);
+    const totalChars = merged.reduce((sum, chunk) => sum + (chunk.text?.length || 0), 0);
+    const threshold = options.threshold ?? LOG_LAZY_CHAR_THRESHOLD;
+    if (totalChars <= threshold) {
+      return {
+        mode: 'full',
+        visible: merged,
+        totalChars,
+        hiddenChars: 0,
+        hasHidden: false,
+        visibleChars: totalChars,
+      };
+    }
+    const tailChars = options.tailChars ?? LOG_LAZY_TAIL_CHARS;
+    const requestedVisible = Math.max(options.visibleChars ?? tailChars, tailChars);
+    const visibleChars = Math.min(totalChars, requestedVisible);
+    if (visibleChars >= totalChars) {
+      return {
+        mode: 'full',
+        visible: merged,
+        totalChars,
+        hiddenChars: 0,
+        hasHidden: false,
+        visibleChars: totalChars,
+      };
+    }
+    const sliced = sliceMergedLogTail(merged, visibleChars);
+    return {
+      mode: 'lazy',
+      visible: sliced.visible,
+      totalChars,
+      hiddenChars: sliced.hiddenChars,
+      hasHidden: sliced.hasHidden,
+      visibleChars,
+    };
+  }
+
+  function formatLazyHiddenHint(hiddenChars) {
+    if (hiddenChars >= 10000) return `约 ${Math.round(hiddenChars / 1000)}k 字`;
+    if (hiddenChars >= 1000) return `约 ${(hiddenChars / 1000).toFixed(1)}k 字`;
+    return `${hiddenChars} 字`;
+  }
+
   function renderLogChunksHtml(chunks, options = {}) {
     const placeholder = options.placeholder || '等待输出…';
-    const merged = mergeLogChunksForDisplay(chunks);
+    const merged = options.merged || mergeLogChunksForDisplay(chunks);
     if (!merged.length) {
       return `<div class="log-chunk log-chunk-system">${escapeHtml(placeholder)}</div>`;
     }
@@ -201,6 +281,21 @@
         : escapeHtml(chunk.text);
       return `<div class="log-chunk ${cls}">${content}</div>`;
     }).join('');
+  }
+
+  function renderLogStreamHtml(chunks, options = {}) {
+    const plan = planLogLazyDisplay(chunks, options.lazy);
+    const inner = renderLogChunksHtml(chunks, {
+      placeholder: options.placeholder,
+      merged: plan.visible,
+    });
+    if (plan.mode !== 'lazy' || !plan.hasHidden) return inner;
+    return [
+      `<button type="button" class="log-lazy-trigger" data-hidden-chars="${plan.hiddenChars}">`,
+      `↑ 还有 ${formatLazyHiddenHint(plan.hiddenChars)} 更早输出，点击或向上滚动加载`,
+      '</button>',
+      inner,
+    ].join('');
   }
 
   const DONE_VISIBLE_DEFAULT = 7;
@@ -298,12 +393,17 @@
       ? formatMarkdown(summary)
       : escapeHtml(summary);
     const showSummary = round.complete || options.showIncompleteSummary;
+    const lazyOptions = options.lazyByRound?.[round.round] || options.lazy || {};
+    const logOptions = {
+      ...(options.logOptions || {}),
+      lazy: lazyOptions,
+    };
     const parts = [
       `<section class="iteration-round" data-round="${round.round}">`,
       `<div class="iteration-round-label">${escapeHtml(round.label)}</div>`,
       '<section class="output-section">',
       '<h3>实时输出</h3>',
-      `<div class="log-stream">${renderLogChunksHtml(round.chunks, options.logOptions)}</div>`,
+      `<div class="log-stream" data-round="${round.round}">${renderLogStreamHtml(round.chunks, logOptions)}</div>`,
       '</section>',
     ];
     if (showSummary) {
@@ -344,7 +444,15 @@
     formatInlineMarkdown,
     formatMarkdown,
     mergeLogChunksForDisplay,
+    LOG_LAZY_CHAR_THRESHOLD,
+    LOG_LAZY_TAIL_CHARS,
+    LOG_LAZY_EXPAND_CHARS,
+    estimateLogTextLength,
+    sliceMergedLogTail,
+    planLogLazyDisplay,
+    formatLazyHiddenHint,
     renderLogChunksHtml,
+    renderLogStreamHtml,
     DONE_VISIBLE_DEFAULT,
     limitDoneTasksForDisplay,
     isActiveTaskStatus,

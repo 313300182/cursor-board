@@ -1,5 +1,4 @@
 const { v4: uuidv4 } = require('uuid');
-const fs = require('fs');
 const AcpRunner = require('./acp-runner');
 const ProjectScheduler = require('./scheduler');
 const { taskWorkdirPaths } = ProjectScheduler;
@@ -15,9 +14,12 @@ const {
 } = require('./templates');
 const { resolveTaskModel } = require('./model-config');
 const { statusForPhase } = require('./pipeline');
+const {
+  isWorkdirAllowed,
+  validateWorkdirs,
+  normalizeAttachments,
+} = require('./src/shared/validation');
 
-const MAX_ATTACHMENT_DATA_LENGTH = 3 * 1024 * 1024;
-const MAX_TOTAL_ATTACHMENT_DATA_LENGTH = 8 * 1024 * 1024;
 const MAX_LOG_CHUNK_CHARS = 64 * 1024;
 
 function buildIterationContextFallback(parentTask) {
@@ -69,12 +71,7 @@ class TaskQueue {
   }
 
   isWorkdirAllowed(workdir) {
-    const normalized = workdir.replace(/\//g, '\\');
-    const allowlist = this.config.security?.workdirAllowlist || [];
-    return allowlist.some((prefix) => {
-      const p = prefix.replace(/\//g, '\\');
-      return normalized.toLowerCase().startsWith(p.toLowerCase());
-    });
+    return isWorkdirAllowed(workdir, this.config.security?.workdirAllowlist);
   }
 
   resolveTaskWorkdirs(project, input = {}) {
@@ -125,15 +122,10 @@ class TaskQueue {
   }
 
   validateTaskWorkdirs(workdirs) {
-    for (const entry of workdirs) {
-      const workdir = entry.path;
-      if (!fs.existsSync(workdir) || !fs.statSync(workdir).isDirectory()) {
-        throw new Error(`工作目录不存在或不是文件夹: ${workdir}`);
-      }
-      if (!this.isWorkdirAllowed(workdir)) {
-        throw new Error(`工作目录不在白名单内: ${workdir}`);
-      }
-    }
+    validateWorkdirs({
+      workdirs,
+      allowed: this.config.security?.workdirAllowlist,
+    });
   }
 
   createTask(input) {
@@ -167,7 +159,7 @@ class TaskQueue {
       ...buildWorkdirTemplateContext(workdirs),
       ...variables,
     });
-    const attachments = normalizeAttachments(input.attachments);
+    const attachments = normalizeAttachments(input.attachments, { includeField: true });
     const pipelineMode = Boolean(
       input.pipelineMode ?? isPipelineTemplate(template),
     );
@@ -216,7 +208,7 @@ class TaskQueue {
       throw new Error('仅已完成或待部署任务可发起迭代');
     }
 
-    const attachments = normalizeAttachments(input.attachments);
+    const attachments = normalizeAttachments(input.attachments, { includeField: true });
     const requirement = String(input.requirement || '').trim();
     if (!requirement && !attachments.length) throw new Error('请填写优化需求');
 
@@ -343,7 +335,7 @@ class TaskQueue {
     }
     const message = String(input.message || '').trim();
     const skipTest = Boolean(input.skipTest);
-    const attachments = normalizeAttachments(input.attachments);
+    const attachments = normalizeAttachments(input.attachments, { includeField: true });
     if (!message && !skipTest && !attachments.length) throw new Error('消息不能为空');
     const result = this.runner.steerTask(id, message, { skipTest, attachments });
     this.repo.addEvent(id, 'user_message', { message, skipTest, attachmentCount: attachments.length });
@@ -560,29 +552,6 @@ class TaskQueue {
 
 module.exports = TaskQueue;
 module.exports.isIterableStatus = isIterableStatus;
-
-function normalizeAttachments(raw) {
-  if (!Array.isArray(raw)) return [];
-  const result = [];
-  let totalLength = 0;
-  for (const item of raw) {
-    const normalized = {
-      mimeType: String(item?.mimeType || '').trim(),
-      data: String(item?.data || '').trim(),
-      field: item?.field ? String(item.field) : null,
-    };
-    if (!normalized.mimeType.startsWith('image/') || !normalized.data) continue;
-    if (normalized.data.length > MAX_ATTACHMENT_DATA_LENGTH) {
-      throw new Error('单个图片附件过大');
-    }
-    if (totalLength + normalized.data.length > MAX_TOTAL_ATTACHMENT_DATA_LENGTH) {
-      throw new Error('图片附件总大小过大');
-    }
-    totalLength += normalized.data.length;
-    result.push(normalized);
-  }
-  return result;
-}
 
 function takeRetryError(task) {
   const message = String(task.variables?.__retry_error || '').trim();

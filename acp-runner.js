@@ -25,6 +25,7 @@ const {
   buildCommitMessage,
 } = require('./git-runner');
 const { createAcpLogger } = require('./acp-logger');
+const { normalizeAttachments } = require('./src/shared/validation');
 
 const MAX_PROMPT_RETRIES = 2;
 const PROMPT_RETRY_DELAY_MS = 1500;
@@ -32,7 +33,6 @@ const MAX_SESSION_LOG_CHARS = 2 * 1024 * 1024;
 const MAX_TURN_LOG_CHARS = 512 * 1024;
 const MAX_PERMISSION_EVENTS = 1000;
 const MAX_EDITED_PATHS = 10000;
-const MAX_ATTACHMENT_DATA_LENGTH = 3 * 1024 * 1024;
 
 function buildAgentSpawn(agentBin, workdir) {
   if (process.platform !== 'win32') {
@@ -923,18 +923,11 @@ function appendBounded(items, value, limit, currentChars = null) {
 }
 
 function normalizeSteerAttachments(raw) {
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .map((item) => ({
-      mimeType: String(item?.mimeType || '').trim(),
-      data: String(item?.data || '').trim(),
-    }))
-    .filter((item) => (
-      item.mimeType.startsWith('image/')
-      && item.data
-      && item.data.length <= MAX_ATTACHMENT_DATA_LENGTH
-    ))
-    .slice(0, 5);
+  return normalizeAttachments(raw, {
+    maxItems: 5,
+    rejectOversize: false,
+    enforceTotal: false,
+  });
 }
 
 module.exports = AcpRunner;

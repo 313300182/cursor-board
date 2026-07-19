@@ -1,29 +1,11 @@
-const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const AcpRunner = require('./acp-runner');
 const { resolveTaskModel } = require('./model-config');
 const { ROOT } = require('./src/config');
-
-const MAX_ATTACHMENT_DATA_LENGTH = 3 * 1024 * 1024;
-const MAX_TOTAL_ATTACHMENT_DATA_LENGTH = 8 * 1024 * 1024;
-
-function normalizeAttachments(items) {
-  if (!Array.isArray(items)) return [];
-  const result = [];
-  let totalLength = 0;
-  for (const item of items) {
-    if (!item?.mimeType?.startsWith('image/') || !item?.data) continue;
-    const data = String(item.data);
-    if (data.length > MAX_ATTACHMENT_DATA_LENGTH) throw new Error('单个图片附件过大');
-    if (totalLength + data.length > MAX_TOTAL_ATTACHMENT_DATA_LENGTH) {
-      throw new Error('图片附件总大小过大');
-    }
-    totalLength += data.length;
-    result.push({ mimeType: String(item.mimeType), data });
-    if (result.length >= 5) break;
-  }
-  return result;
-}
+const {
+  validateWorkdirs,
+  normalizeAttachments,
+} = require('./src/shared/validation');
 
 function deriveSessionTitle(message) {
   const line = String(message || '').replace(/\r\n/g, '\n').split('\n').map((entry) => entry.trim()).find(Boolean) || '';
@@ -45,24 +27,13 @@ class ChatService {
     this.runningSessions = new Set();
   }
 
-  isWorkdirAllowed(workdir) {
-    const normalized = workdir.replace(/\//g, '\\');
-    const allowlist = this.config.security?.workdirAllowlist || [];
-    return allowlist.some((prefix) => {
-      const p = prefix.replace(/\//g, '\\');
-      return normalized.toLowerCase().startsWith(p.toLowerCase());
-    });
-  }
-
   validateWorkdir(workdir) {
     const dir = String(workdir || '').trim();
     if (!dir) throw new Error('工作目录不能为空');
-    if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) {
-      throw new Error(`工作目录不存在或不是文件夹: ${dir}`);
-    }
-    if (!this.isWorkdirAllowed(dir)) {
-      throw new Error(`工作目录不在白名单内: ${dir}`);
-    }
+    validateWorkdirs({
+      workdirs: [{ path: dir }],
+      allowed: this.config.security?.workdirAllowlist,
+    });
     return dir;
   }
 
@@ -141,7 +112,10 @@ class ChatService {
     }
     const message = String(input.message || '').trim();
     if (!message) throw new Error('消息不能为空');
-    const attachments = normalizeAttachments(input.attachments);
+    const attachments = normalizeAttachments(input.attachments, {
+      trimValues: false,
+      maxItems: 5,
+    });
     const now = new Date().toISOString();
     const userMessage = this.chatRepo.addMessage(sessionId, {
       role: 'user',

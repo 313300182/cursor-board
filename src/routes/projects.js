@@ -1,4 +1,3 @@
-const fs = require('fs');
 const crypto = require('crypto');
 const express = require('express');
 const { normalizeWorkdirs } = require('../../db');
@@ -7,17 +6,19 @@ const { scanProjectSkillsForWorkdirs } = require('../../project-skills');
 const { getModelSettings } = require('../../model-config');
 const { getTemplate } = require('../../templates');
 const { asyncHandler, HttpError } = require('../middleware/error');
+const { validateWorkdirs } = require('../shared/validation');
 
 function validateProjectWorkdirs(workdirs, queue) {
   const normalized = normalizeWorkdirs(workdirs);
   if (!normalized.length) throw new HttpError(400, '至少需要一个工作目录');
-  for (const entry of normalized) {
-    if (!queue.isWorkdirAllowed(entry.path)) {
-      throw new HttpError(400, `工作目录不在白名单内: ${entry.path}`);
-    }
-    if (!fs.existsSync(entry.path) || !fs.statSync(entry.path).isDirectory()) {
-      throw new HttpError(400, `工作目录不存在或不是文件夹: ${entry.path}`);
-    }
+  try {
+    validateWorkdirs({
+      workdirs: normalized,
+      isAllowed: (workdir) => queue.isWorkdirAllowed(workdir),
+      allowedFirst: true,
+    });
+  } catch (err) {
+    throw new HttpError(400, err.message);
   }
   return normalized;
 }

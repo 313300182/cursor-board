@@ -528,6 +528,18 @@
     return summaryPlaceholder('running');
   }
 
+  function renderTaskPromptHtml(task, round) {
+    if (round?.round !== 1) return '';
+    const prompt = String(task?.prompt_rendered || '').trim();
+    if (!prompt) return '';
+    return [
+      '<section class="output-section task-prompt-section">',
+      '<h3>给 AI 的提示词</h3>',
+      `<pre class="task-prompt-box">${escapeHtml(prompt)}</pre>`,
+      '</section>',
+    ].join('');
+  }
+
   function renderTaskRoundHtml(round, task, options = {}) {
     const summary = resolveRoundSummary(round, task);
     const hasSummary = Boolean(String(round?.summary || '').trim());
@@ -544,6 +556,7 @@
     const parts = [
       `<section class="iteration-round" data-round="${round.round}">`,
       `<div class="iteration-round-label">${escapeHtml(round.label)}</div>`,
+      renderTaskPromptHtml(task, round),
       '<section class="output-section">',
       '<h3>实时输出</h3>',
       `<div class="log-stream" data-round="${round.round}">${renderLogStreamHtml(round.chunks, logOptions)}</div>`,
@@ -584,6 +597,7 @@
     summaryPlaceholder,
     resolveTaskSummary,
     escapeHtml,
+    renderTaskPromptHtml,
     formatInlineMarkdown,
     formatMarkdown,
     mergeLogChunksForDisplay,

@@ -23,6 +23,7 @@ const {
   isIterableTaskStatus,
   isCompletedRoundStatus,
   parseTaskDisplayRounds,
+  renderTaskPromptHtml,
   renderTaskRoundsHtml,
 } = require('../public/task-display');
 
@@ -276,6 +277,25 @@ test('renderTaskRoundsHtml 渲染多轮区块', () => {
   assert.match(html, /迭代 2/);
   assert.match(html, /hello/);
   assert.match(html, /world/);
+});
+
+test('renderTaskPromptHtml 在初始任务中展示给 AI 的提示词', () => {
+  const html = renderTaskPromptHtml(
+    { prompt_rendered: '修复登录问题\n\n不要修改数据库结构。' },
+    { round: 1 },
+  );
+  assert.match(html, /给 AI 的提示词/);
+  assert.match(html, /修复登录问题/);
+  assert.match(html, /不要修改数据库结构/);
+  assert.match(html, /task-prompt-box/);
+});
+
+test('renderTaskPromptHtml 不在迭代轮次重复展示提示词', () => {
+  const html = renderTaskPromptHtml(
+    { prompt_rendered: '初始提示词' },
+    { round: 2 },
+  );
+  assert.equal(html, '');
 });
 
 test('planLogLazyDisplay 短内容全量展示，长内容默认只展示尾部', () => {

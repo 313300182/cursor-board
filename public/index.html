@@ -10,25 +10,45 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script>
+    try{
+      if(localStorage.getItem('cursorBoardToken'))document.documentElement.classList.add('has-auth-token');
+    }catch(error){}
+  </script>
   <style>
     :root {
       --bg:#0D0F13;
       --surface:#14161B;
       --surface-2:#191C22;
       --surface-hover:#1E222A;
-      --text:#E6E8EB;
-      --text-2:#9BA1AC;
+      --text:#E4E7EB;
+      --text-2:#9CA3AF;
       --text-3:#6B7280;
-      --accent:#6366F1;
-      --accent-hover:#7C7FF2;
-      --accent-subtle:rgba(99,102,241,.14);
+      --content:#DDE1E6;
+      --content-muted:#9CA3AF;
+      --link:#7EB8E8;
+      --link-hover:#9CCBF0;
+      --accent:#4B8BF5;
+      --accent-hover:#6BA0F7;
+      --accent-subtle:rgba(75,139,245,.12);
       --border:rgba(255,255,255,.06);
       --border-strong:rgba(255,255,255,.10);
-      --st-queued:#FBBF24;
-      --st-running:#60A5FA;
-      --st-done:#34D399;
-      --st-failed:#F87171;
-      --st-complex:#C084FC;
+      --st-queued:#E5B84A;
+      --st-running:#58A6FF;
+      --st-done:#3FBF7F;
+      --st-failed:#F07070;
+      --st-complex:#8B95A5;
+      --card-active-border:rgba(88,166,255,.38);
+      --card-active-bg:rgba(88,166,255,.06);
+      --badge-template-fg:#8EB4DC;
+      --badge-template-bg:rgba(142,180,220,.10);
+      --log-thinking-fg:#7D8694;
+      --log-thinking-border:rgba(125,134,148,.32);
+      --log-thinking-bg:rgba(125,134,148,.05);
+      --log-system-fg:#C4A24E;
+      --log-system-bg:rgba(196,162,78,.07);
+      --chat-user-bg:rgba(88,166,255,.08);
+      --chat-user-border:rgba(88,166,255,.22);
       --radius:6px;
       --radius-lg:8px;
       --transition:180ms ease-out;
@@ -94,6 +114,7 @@
     h3{margin:0 0 12px;font-size:14px;font-weight:600}
     .toolbar{display:flex;gap:10px;align-items:center}
     .toolbar>*{width:auto}
+    .project-switcher{min-width:190px;max-width:260px;padding-top:8px;padding-bottom:8px;font-size:12px}
     .projects-layout{max-width:1200px}
     .home-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px;flex-wrap:wrap}
     .home-header h1{margin-bottom:6px}
@@ -215,9 +236,9 @@
       transition:border-color var(--transition),background-color var(--transition);
     }
     .card:hover{background:var(--surface-hover);border-color:var(--border-strong)}
-    .card.active{border-color:var(--accent);background:var(--accent-subtle)}
-    .card-title{font-weight:600;font-size:14px;line-height:1.45;word-break:break-word}
-    .meta{font-size:12px;font-weight:500;color:var(--text-2);margin-top:6px;line-height:1.45;word-break:break-word}
+    .card.active{border-color:var(--card-active-border);background:var(--card-active-bg)}
+    .card-title{font-weight:600;font-size:14px;line-height:1.45;word-break:break-word;color:var(--content)}
+    .meta{font-size:12px;font-weight:500;color:var(--content-muted);margin-top:6px;line-height:1.45;word-break:break-word}
     .status-chip{display:inline-block;font-size:10px;font-weight:600;padding:1px 6px;border-radius:99px;margin-top:6px;background:var(--surface-hover);color:var(--text-2)}
     .status-chip.active{color:var(--st-running);background:color-mix(in srgb,var(--st-running) 14%,transparent)}
     .status-chip.wait{color:var(--st-queued);background:color-mix(in srgb,var(--st-queued) 14%,transparent)}
@@ -229,10 +250,32 @@
       border-color:var(--st-queued);
       box-shadow:0 0 0 1px color-mix(in srgb,var(--st-queued) 35%,transparent);
     }
+    .card.draggable-pending{cursor:grab}
+    .card.draggable-pending:active{cursor:grabbing}
+    .card.dragging{opacity:.55}
+    .card.drag-over{border-color:var(--accent);box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 35%,transparent)}
+    .card-drag-handle{
+      flex:0 0 auto;
+      width:18px;
+      align-self:stretch;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      margin:-10px 8px -10px -10px;
+      padding:0 2px;
+      color:var(--text-3);
+      cursor:grab;
+      user-select:none;
+      touch-action:none;
+    }
+    .card-drag-handle::before{content:'⋮⋮';font-size:11px;letter-spacing:-2px;line-height:1}
+    .card-drag-handle:hover{color:var(--text-2)}
+    .card-row{display:flex;align-items:stretch;gap:0}
+    .card-body{flex:1;min-width:0}
     .card-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center}
     .card-tags .badge,.card-tags .status-chip{margin-top:0}
     .badge{display:inline-block;font-size:11px;font-weight:500;padding:2px 7px;border-radius:99px;margin-top:7px;background:var(--surface-hover);color:var(--text-2)}
-    .badge.template{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent)}
+    .badge.template{background:var(--badge-template-bg);color:var(--badge-template-fg)}
     .badge.model{background:color-mix(in srgb,var(--st-running) 14%,transparent);color:var(--st-running)}
     .queue-next{background:color-mix(in srgb,var(--st-queued) 14%,transparent);color:var(--st-queued)}
     .complex{background:color-mix(in srgb,var(--st-complex) 14%,transparent);color:var(--st-complex)}
@@ -270,8 +313,8 @@
     .markdown code{background:var(--surface-hover);padding:1px 4px;border-radius:4px;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px}
     .markdown strong{font-weight:600;color:var(--text)}
     .markdown em{font-style:italic;color:var(--text-2)}
-    .markdown a{color:var(--accent);text-decoration:none}
-    .markdown a:hover{text-decoration:underline}
+    .markdown a{color:var(--link);text-decoration:none}
+    .markdown a:hover{color:var(--link-hover);text-decoration:underline}
     .md-pre{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:10px;margin:8px 0;overflow-x:auto;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;line-height:1.45;white-space:pre-wrap}
     .md-pre code{background:transparent;padding:0;border-radius:0;font-size:inherit}
     .md-quote{margin:8px 0;padding:8px 12px;border-left:3px solid var(--border-strong);color:var(--text-2);background:color-mix(in srgb,var(--surface-2) 50%,transparent)}
@@ -427,7 +470,7 @@
       max-height:none;
       min-height:0;
     }
-    .task-detail-panel .summary-box{color:var(--text)}
+    .task-detail-panel .summary-box{color:var(--content)}
     .log-lazy-trigger{
       display:block;
       width:100%;
@@ -451,22 +494,38 @@
     .task-detail-conversation{display:flex;flex-direction:column;gap:12px;margin-top:2px;padding-top:14px;border-top:1px solid var(--border)}
     .log-chunk{white-space:pre-wrap;overflow-wrap:break-word;margin:0}
     .log-chunk+.log-chunk{margin-top:8px;padding-top:8px;border-top:1px dashed var(--border)}
-    .log-chunk-thinking{color:var(--st-complex);border-left:2px solid var(--st-complex);padding-left:8px;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px}
-    .log-chunk-message{color:var(--text);line-height:1.55;white-space:normal;font-family:inherit}
+    .log-chunk-thinking{
+      color:var(--log-thinking-fg);
+      background:var(--log-thinking-bg);
+      border-left:2px solid var(--log-thinking-border);
+      padding:6px 8px 6px 10px;
+      border-radius:0 var(--radius) var(--radius) 0;
+      font-family:"JetBrains Mono",ui-monospace,monospace;
+      font-size:11px;
+      line-height:1.5;
+    }
+    .log-chunk-message{color:var(--content);line-height:1.55;white-space:normal;font-family:inherit}
     .log-chunk-message h1,.log-chunk-message h2,.log-chunk-message h3{margin:10px 0 4px;font-size:13px;font-weight:600}
     .log-chunk-message p{margin:4px 0}
     .log-chunk-message ul,.log-chunk-message ol{margin:4px 0 4px 18px;padding:0}
     .log-chunk-message li{margin:2px 0}
     .log-chunk-message code{background:var(--surface-hover);padding:1px 4px;border-radius:4px;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px}
-    .log-chunk-message strong{font-weight:600;color:var(--text)}
+    .log-chunk-message strong{font-weight:600;color:var(--content)}
     .log-chunk-message em{font-style:italic;color:var(--text-2)}
-    .log-chunk-message a{color:var(--accent);text-decoration:none}
-    .log-chunk-message a:hover{text-decoration:underline}
+    .log-chunk-message a{color:var(--link);text-decoration:none}
+    .log-chunk-message a:hover{color:var(--link-hover);text-decoration:underline}
     .log-chunk-message .md-pre,.summary-box .md-pre{margin:6px 0}
     .log-chunk-message .md-table-wrap,.summary-box .md-table-wrap{margin:6px 0}
-    .summary-box.markdown{white-space:normal;font-family:inherit;color:var(--text)}
+    .summary-box.markdown{white-space:normal;font-family:inherit;color:var(--content)}
     .summary-box.markdown p,.summary-box.markdown li{line-height:1.55}
-    .log-chunk-system{color:var(--st-queued);font-size:11px;white-space:pre-wrap}
+    .log-chunk-system{
+      color:var(--log-system-fg);
+      background:var(--log-system-bg);
+      padding:4px 8px;
+      border-radius:var(--radius);
+      font-size:11px;
+      white-space:pre-wrap;
+    }
     .task-detail-close{padding:4px 10px;font-size:12px;flex-shrink:0}
     .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:110;display:flex;align-items:center;justify-content:center;padding:16px}
     .modal-panel{
@@ -495,13 +554,14 @@
     .modal-section h4{margin:0 0 10px;font-size:13px;font-weight:600;color:var(--text-2)}
     .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
     body.auth-locked>header,body.auth-locked>.container{visibility:hidden}
-    .login-gate{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;background:radial-gradient(circle at 50% 20%,rgba(99,102,241,.16),transparent 42%),var(--bg)}
+    .login-gate{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;background:radial-gradient(circle at 50% 20%,rgba(75,139,245,.10),transparent 42%),var(--bg)}
     .login-panel{width:min(390px,100%);padding:28px;background:var(--surface);border:1px solid var(--border-strong);border-radius:12px;box-shadow:0 24px 80px rgba(0,0,0,.42)}
     .login-mark{width:42px;height:42px;display:grid;place-items:center;margin-bottom:18px;border-radius:10px;background:var(--accent);color:#fff;font-weight:700;font-size:18px}
     .login-panel h1{font-size:22px;margin-bottom:6px}
     .login-panel .primary{width:100%;margin-top:18px;padding:11px}
     .login-hint{margin:0 0 18px;color:var(--text-2);font-size:13px}
     .password-note{font-size:12px;color:var(--text-3);margin-top:8px}
+    html.has-auth-token .login-gate{display:none}
     .interaction{
       border:1px solid color-mix(in srgb,var(--st-queued) 40%,transparent);
       background:color-mix(in srgb,var(--st-queued) 10%,transparent);
@@ -512,8 +572,8 @@
     .option{display:flex;gap:8px;align-items:center;margin:7px 0}
     .option input{width:auto}
     .steer-panel{
-      border:1px solid var(--accent);
-      background:var(--accent-subtle);
+      border:1px solid color-mix(in srgb,var(--st-running) 35%,transparent);
+      background:color-mix(in srgb,var(--st-running) 8%,transparent);
       border-radius:var(--radius);
       padding:12px;
       display:flex;
@@ -535,7 +595,7 @@
     .chat-main{display:flex;flex-direction:column;min-height:0;overflow:hidden}
     .chat-messages{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:12px;min-height:0}
     .chat-bubble{max-width:min(760px,92%);padding:10px 12px;border-radius:var(--radius-lg);border:1px solid var(--border);background:var(--surface-2)}
-    .chat-bubble.user{align-self:flex-end;background:var(--accent-subtle);border-color:color-mix(in srgb,var(--accent) 30%,transparent)}
+    .chat-bubble.user{align-self:flex-end;background:var(--chat-user-bg);border-color:var(--chat-user-border)}
     .chat-bubble.assistant{align-self:flex-start}
     .chat-bubble-label{font-size:10px;font-weight:600;color:var(--text-3);margin-bottom:6px;letter-spacing:.04em;text-transform:uppercase}
     .chat-bubble .markdown,.chat-bubble .chat-text{font-size:13px;line-height:1.55}
@@ -589,6 +649,7 @@
     <div class="toolbar">
       <span id="queueState" class="muted"></span>
       <span id="connState" class="muted">未连接</span>
+      <select id="projectSwitcher" class="project-switcher hidden" aria-label="切换项目"></select>
       <button type="button" id="securityBtn" class="hidden">安全设置</button>
     </div>
   </header>
@@ -746,6 +807,16 @@
           <label class="switch"><input id="projectGitPushEditor" type="checkbox"><span class="slider"></span></label>
         </div>
       </div>
+      <div class="modal-section">
+        <h4>任务默认值</h4>
+        <label for="projectSimpleModelEditor">简单模式模型</label>
+        <select id="projectSimpleModelEditor"></select>
+        <label for="projectComplexModelEditor">复杂模式模型</label>
+        <select id="projectComplexModelEditor"></select>
+        <label for="projectDefaultTemplateEditor">默认任务类型</label>
+        <select id="projectDefaultTemplateEditor"></select>
+        <div class="muted" style="font-size:11px;margin-top:8px">新建任务未手动选择时使用这些默认值。</div>
+      </div>
       <div id="projectConfigError" class="error"></div>
       <div class="modal-actions">
         <button type="button" id="projectConfigCancelBtn">取消</button>
@@ -790,7 +861,14 @@
       <h3 id="iterateModalTitle">迭代任务</h3>
       <p class="muted">基于当前任务的对话上下文继续优化，将自动继承原任务的模型与执行设置，不会新建任务卡片。</p>
       <label for="iterateRequirement">优化需求</label>
-      <textarea id="iterateRequirement" rows="8" placeholder="描述要优化或改进的内容、验收标准等"></textarea>
+      <textarea id="iterateRequirement" rows="8" placeholder="描述要优化或改进的内容、验收标准等；可直接 Ctrl+V 粘贴截图"></textarea>
+      <div class="field-toolbar" style="margin-top:8px">
+        <div class="toolbar">
+          <button type="button" id="iteratePasteImageBtn">粘贴图片</button>
+          <input type="file" accept="image/*" class="hidden" id="iterateImageInput" multiple />
+        </div>
+      </div>
+      <div class="image-previews" data-image-list="iterateRequirement"></div>
       <div id="iterateGitCommitRow" class="switch-row hidden">
         <div><strong>Git</strong><div class="muted" style="font-size:11px">测试通过后自动 commit，并按项目设置 push</div></div>
         <label class="switch"><input id="iterateGitCommitInput" type="checkbox" checked><span class="slider"></span></label>
@@ -849,7 +927,7 @@
       project: null, projects: [], tasks: [], templates: [], rules: [], selectedRuleIndex: 0,
       skills: [], selectedSkillIndex: 0,
       selectedId: null, logChunks: {}, taskEvents: {}, taskLogVisibleChars: {}, models: { options: [] }, fieldImages: {},
-      doneExpanded: false, archivedTasks: [], showArchived: false,
+      doneExpanded: false, archivedTasks: [], archivedCount: 0, showArchived: false,
       iterateSourceId: null,
       chat: {
         scope: null,
@@ -861,7 +939,10 @@
         sessionsById: {},
       },
       eventSource: null,
+      projectViewBound: false,
+      homeViewBound: false,
     };
+    const recentProjectIdsKey='cursorBoardRecentProjects';
     const $ = (id) => document.getElementById(id);
 
     function headers(){return {'Content-Type':'application/json',Authorization:`Bearer ${state.token}`}}
@@ -879,6 +960,154 @@
     function escapeHtml(value){return TaskDisplay.escapeHtml(value)}
     function markdown(value){return TaskDisplay.formatMarkdown(value)}
 
+    function getRecentProjectIds(){
+      try{
+        const ids=JSON.parse(localStorage.getItem(recentProjectIdsKey)||'[]');
+        return Array.isArray(ids)?ids.map(String):[];
+      }catch(error){return []}
+    }
+
+    function rememberProject(projectId){
+      const ids=getRecentProjectIds().filter(id=>id!==String(projectId));
+      ids.unshift(String(projectId));
+      localStorage.setItem(recentProjectIdsKey,JSON.stringify(ids.slice(0,8)));
+    }
+
+    function renderProjectSwitcher(){
+      const switcher=$('projectSwitcher');
+      if(!switcher)return;
+      const projects=state.projects||[];
+      const recentIds=getRecentProjectIds();
+      const recent=recentIds.map(id=>projects.find(project=>String(project.id)===id)).filter(Boolean);
+      const rest=projects.filter(project=>!recent.some(item=>item.id===project.id));
+      const option=project=>`<option value="${escapeHtml(project.id)}">${escapeHtml(project.name)}${project.type==='machine'?' · 系统':''}</option>`;
+      switcher.innerHTML=[
+        recent.length?`<optgroup label="最近使用">${recent.map(option).join('')}</optgroup>`:'',
+        rest.length?`<optgroup label="所有项目">${rest.map(option).join('')}</optgroup>`:'',
+      ].join('');
+      switcher.value=state.projectId||'';
+      switcher.classList.toggle('hidden',!state.projectId||!projects.length);
+    }
+
+    async function navigateToProject(projectId,{replace=false}={}){
+      const id=projectId?String(projectId):null;
+      const url=id?`/?project=${encodeURIComponent(id)}`:'/';
+      if(replace)history.replaceState({},'',url);
+      else history.pushState({},'',url);
+      state.projectId=id;
+      if(id){
+        rememberProject(id);
+        await showProjectView();
+      }else{
+        await showHomeView();
+      }
+    }
+
+    async function showHomeView(){
+      state.project=null;
+      bindHomeViewControls();
+      $('homeView').classList.remove('hidden');
+      $('projectView').classList.add('hidden');
+      $('homeBtn').classList.add('hidden');
+      $('projectSwitcher').classList.add('hidden');
+      $('pageTitle').textContent='项目中心';
+      await loadHome();
+    }
+
+    async function showProjectView(){
+      $('homeView').classList.add('hidden');
+      $('projectView').classList.remove('hidden');
+      $('homeBtn').classList.remove('hidden');
+      bindProjectViewControls();
+      if(!state.projects.length)state.projects=await api('/api/projects');
+      renderProjectSwitcher();
+      await loadProject();
+    }
+
+    function bindHomeViewControls(){
+      if(state.homeViewBound)return;
+      state.homeViewBound=true;
+      $('openCreateProjectBtn').onclick=openCreateProjectModal;
+      $('openGlobalChatBtn').onclick=()=>openChat('global');
+      $('chatModalCloseBtn').onclick=closeChat;
+      $('chatModalFooterCloseBtn').onclick=closeChat;
+      $('chatModal').onclick=(event)=>{
+        if(event.target===$('chatModal'))closeChat();
+      };
+      $('createProjectForm').onsubmit=createProject;
+      $('createProjectCancelBtn').onclick=closeCreateProjectModal;
+      $('createProjectModal').onclick=(event)=>{
+        if(event.target===$('createProjectModal'))closeCreateProjectModal();
+      };
+      renderCreateProjectWorkdirs();
+      $('addProjectWorkdirBtn').onclick=()=>{
+        bindWorkdirList(
+          $('projectWorkdirs'),
+          [...collectWorkdirRows($('projectWorkdirs')),{label:'',path:''}],
+        );
+      };
+      $('projectGitEnabled').onchange=syncProjectGitPushVisibility;
+    }
+
+    function bindProjectViewControls(){
+      if(state.projectViewBound)return;
+      state.projectViewBound=true;
+      $('createTaskBtn').onclick=createTask;
+      $('refreshBtn').onclick=loadProject;
+      $('rulesBtn').onclick=openRulesModal;
+      $('rulesModalCloseBtn').onclick=closeRulesModal;
+      $('rulesModal').onclick=(event)=>{
+        if(event.target===$('rulesModal'))closeRulesModal();
+      };
+      $('skillsBtn').onclick=openSkillsModal;
+      $('skillsModalCloseBtn').onclick=closeSkillsModal;
+      $('skillsModal').onclick=(event)=>{
+        if(event.target===$('skillsModal'))closeSkillsModal();
+      };
+      $('projectConfigBtn').onclick=openProjectConfigModal;
+      $('projectConfigForm').onsubmit=saveProjectConfig;
+      $('projectConfigCancelBtn').onclick=closeProjectConfigModal;
+      $('projectConfigModal').onclick=(event)=>{
+        if(event.target===$('projectConfigModal'))closeProjectConfigModal();
+      };
+      $('deployProjectBtn').onclick=deployProject;
+      $('approveDeployFixBtn').onclick=()=>respondDeployRepair(true);
+      $('rejectDeployFixBtn').onclick=()=>respondDeployRepair(false);
+      $('taskDetailCloseBtn').onclick=closeTaskDetail;
+      getTaskDetailBody()?.addEventListener('scroll',onTaskDetailScroll,{passive:true});
+      $('taskDetailModal').onclick=(event)=>{
+        if(event.target===$('taskDetailModal'))closeTaskDetail();
+      };
+      $('iterateCancelBtn').onclick=closeIterateModal;
+      $('iterateSubmitBtn').onclick=submitIteration;
+      setupImageField('iterateRequirement',{
+        textarea:$('iterateRequirement'),
+        pasteBtn:$('iteratePasteImageBtn'),
+        fileInput:$('iterateImageInput'),
+        panel:$('iterateModal')?.querySelector('.modal-panel'),
+      });
+      $('iterateGitCommitInput')?.addEventListener('change',syncIterateGitPushVisibility);
+      $('iterateModal').onclick=(event)=>{
+        if(event.target===$('iterateModal'))closeIterateModal();
+      };
+      $('projectChatBtn').onclick=()=>openChat('project',state.projectId);
+      $('chatModalCloseBtn').onclick=closeChat;
+      $('chatModalFooterCloseBtn').onclick=closeChat;
+      $('chatModal').onclick=(event)=>{
+        if(event.target===$('chatModal'))closeChat();
+      };
+      $('addProjectWorkdirEditorBtn').onclick=()=>{
+        bindWorkdirList(
+          $('projectWorkdirsEditor'),
+          [...collectWorkdirRows($('projectWorkdirsEditor')),{label:'',path:''}],
+        );
+      };
+      $('planInput').onchange=()=>{renderModelOptions();renderGitCommitOptions();updateTitlePreview();};
+      $('gitCommitInput')?.addEventListener('change',()=>{$('gitCommitInput').dataset.touched='1';});
+      $('templateSelect').onchange=()=>{syncTemplateSelection();renderTemplateFields();renderGitCommitOptions();updateTitlePreview();};
+      $('projectGitEnabledEditor').onchange=syncProjectGitEditorVisibility;
+    }
+
     async function bootstrap(){
       const data=await api('/api/bootstrap');
       state.models=data.models||{options:[]};
@@ -889,6 +1118,7 @@
       state.eventSource?.close();
       state.eventSource=null;
       state.token='';
+      document.documentElement.classList.remove('has-auth-token');
       localStorage.removeItem('cursorBoardToken');
       document.body.classList.add('auth-locked');
       $('loginGate').classList.remove('hidden');
@@ -898,6 +1128,7 @@
     }
 
     function unlockBoard(){
+      document.documentElement.classList.remove('has-auth-token');
       document.body.classList.remove('auth-locked');
       $('loginGate').classList.add('hidden');
       $('securityBtn').classList.remove('hidden');
@@ -976,10 +1207,28 @@
     }
 
     function renderModelOptions(){
-      const defaultId=$('planInput').checked?state.models.complexDefault:state.models.simpleDefault;
+      const projectDefault=$('planInput').checked?state.project?.complex_model:state.project?.simple_model;
+      const defaultId=projectDefault||($('planInput').checked?state.models.complexDefault:state.models.simpleDefault);
       $('modelSelect').innerHTML=
         `<option value="">默认：${escapeHtml(modelName(defaultId))}</option>`+
         state.models.options.map(item=>`<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join('');
+    }
+
+    function renderProjectDefaultOptions(){
+      const modelOptions=state.models.options.map(item=>
+        `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`,
+      ).join('');
+      ['projectSimpleModelEditor','projectComplexModelEditor'].forEach(id=>{
+        const select=$(id);
+        if(!select)return;
+        select.innerHTML=`<option value="">跟随全局默认</option>${modelOptions}`;
+      });
+      const templateSelect=$('projectDefaultTemplateEditor');
+      if(templateSelect){
+        templateSelect.innerHTML=state.templates.map(item=>
+          `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`,
+        ).join('');
+      }
     }
 
     function templateName(templateId){
@@ -1001,6 +1250,8 @@
     }
 
     function defaultTemplateId(){
+      const configured=state.project?.default_template;
+      if(configured&&state.templates.some(item=>item.id===configured))return configured;
       return state.templates.find(item=>item.id==='general')?.id||state.templates[0]?.id||'';
     }
 
@@ -1090,36 +1341,127 @@
 
     function bindFieldImageEvents(){
       document.querySelectorAll('[data-paste-image]').forEach(button=>{
-        button.onclick=()=>{
-          const field=button.dataset.pasteImage;
-          const input=document.querySelector(`[data-image-input="${field}"]`);
-          if(input)input.click();
-        };
-      });
-      document.querySelectorAll('[data-image-input]').forEach(input=>{
-        input.onchange=()=>{
-          const field=input.dataset.imageInput;
-          Array.from(input.files||[]).forEach(file=>addImageToField(field,file));
-          input.value='';
-        };
-      });
-      (selectedTemplate()?.variables||[]).filter(item=>item.images).forEach(item=>{
-        const textarea=$(`var_${item.name}`);
-        if(!textarea)return;
-        textarea.addEventListener('paste',event=>{
-          const files=Array.from(event.clipboardData?.items||[])
-            .filter(entry=>entry.type.startsWith('image/'))
-            .map(entry=>entry.getAsFile())
-            .filter(Boolean);
-          if(!files.length)return;
-          event.preventDefault();
-          files.forEach(file=>addImageToField(item.name,file));
-        });
+        const field=button.dataset.pasteImage;
+        const input=document.querySelector(`[data-image-input="${field}"]`);
+        setupImageField(field,{textarea:$(`var_${field}`),pasteBtn:button,fileInput:input});
       });
     }
 
+    function isImageMimeType(type){
+      return String(type||'').startsWith('image/');
+    }
+
+    function normalizeImageFile(file){
+      if(!file)return null;
+      if(isImageMimeType(file.type))return file;
+      const ext=String(file.name||'').split('.').pop()?.toLowerCase();
+      const mime={
+        png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',
+        gif:'image/gif',webp:'image/webp',bmp:'image/bmp',svg:'image/svg+xml',
+      }[ext]||'image/png';
+      return new File([file],file.name||`paste.${ext||'png'}`,{type:mime});
+    }
+
+    function extractImageFilesFromClipboardData(data){
+      if(!data)return [];
+      const files=[];
+      const seen=new Set();
+      const push=file=>{
+        const normalized=normalizeImageFile(file);
+        if(!normalized||!isImageMimeType(normalized.type))return;
+        const key=`${normalized.name}:${normalized.size}:${normalized.lastModified}`;
+        if(seen.has(key))return;
+        seen.add(key);
+        files.push(normalized);
+      };
+      for(const entry of Array.from(data.items||[])){
+        if(entry.kind==='file'||isImageMimeType(entry.type)){
+          push(entry.getAsFile());
+        }
+      }
+      if(!files.length){
+        for(const file of Array.from(data.files||[]))push(file);
+      }
+      return files;
+    }
+
+    async function readClipboardImageFiles(){
+      if(navigator.clipboard?.read){
+        try{
+          const items=await navigator.clipboard.read();
+          const files=[];
+          for(const item of items){
+            const type=item.types.find(isImageMimeType);
+            if(!type)continue;
+            const blob=await item.getType(type);
+            files.push(normalizeImageFile(new File(
+              [blob],
+              `clipboard.${type.split('/')[1]||'png'}`,
+              {type},
+            )));
+          }
+          return files.filter(Boolean);
+        }catch(error){
+          // 权限不足或不支持时回退到文件选择
+        }
+      }
+      return [];
+    }
+
+    function addImagesToField(fieldName,files){
+      (files||[]).forEach(file=>{
+        const normalized=normalizeImageFile(file);
+        if(normalized)addImageToField(fieldName,normalized);
+      });
+    }
+
+    function bindImagePasteTarget(fieldName,target){
+      if(!target||target.dataset.imagePasteBound===fieldName)return;
+      target.dataset.imagePasteBound=fieldName;
+      target.addEventListener('paste',event=>{
+        if(event.defaultPrevented)return;
+        const files=extractImageFilesFromClipboardData(event.clipboardData);
+        if(!files.length)return;
+        event.preventDefault();
+        addImagesToField(fieldName,files);
+      });
+    }
+
+    function setupImageField(fieldName,{textarea,pasteBtn,fileInput,panel}={}){
+      if(pasteBtn&&fileInput){
+        pasteBtn.onclick=async()=>{
+          const files=await readClipboardImageFiles();
+          if(files.length){
+            addImagesToField(fieldName,files);
+            return;
+          }
+          fileInput.click();
+        };
+        fileInput.onchange=()=>{
+          addImagesToField(fieldName,Array.from(fileInput.files||[]));
+          fileInput.value='';
+        };
+      }
+      bindImagePasteTarget(fieldName,textarea);
+      bindImagePasteTarget(fieldName,panel);
+    }
+
+    function clearFieldImages(fieldName){
+      delete state.fieldImages[fieldName];
+      renderImagePreviews(fieldName);
+    }
+
+    function collectFieldAttachments(fieldName){
+      return (state.fieldImages[fieldName]||[]).map(item=>({
+        field:fieldName,
+        mimeType:item.mimeType,
+        data:item.data,
+      }));
+    }
+
     function addImageToField(fieldName,file){
-      if(!file||!file.type.startsWith('image/'))return;
+      file=normalizeImageFile(file);
+      if(!file||!isImageMimeType(file.type))return;
       const reader=new FileReader();
       reader.onload=()=>{
         const match=String(reader.result||'').match(/^data:([^;]+);base64,(.+)$/);
@@ -1263,7 +1605,7 @@
     } = window.TaskDisplay;
 
     function renderTaskCard(task, options = {}) {
-      const { queueHead = false, group = '' } = options;
+      const { queueHead = false, group = '', draggable = false } = options;
       const archivedBadge = task.archived ? '<span class="badge">已归档</span>' : '';
       const phaseChip = group === 'developing' && task.status !== 'developing'
         ? `<span class="status-chip active">${escapeHtml(statusLabel(task.status))}</span>`
@@ -1274,19 +1616,107 @@
       const failChip = group === 'problem'
         ? `<span class="status-chip fail">${escapeHtml(statusLabel(task.status))}</span>`
         : '';
+      const dragHandle = draggable
+        ? '<span class="card-drag-handle" draggable="true" title="拖动调整顺序" aria-label="拖动调整顺序"></span>'
+        : '';
       return `
-        <div class="card ${task.id === state.selectedId ? 'active' : ''}" data-task="${task.id}">
-          <div class="card-title">${escapeHtml(task.title)}</div>
-          <div class="card-tags">
-            <span class="badge template">${escapeHtml(templateName(task.template))}</span>
-            <span class="badge model">${escapeHtml(modelName(task.model_id))}</span>
-            ${phaseChip}${waitChip}${failChip}
-            ${queueHead ? '<span class="badge queue-next">队首</span>' : ''}
-            ${task.git_commit ? '<span class="badge">Git</span>' : ''}
-            ${task.is_complex ? '<span class="badge complex">复杂</span>' : ''}
-            ${archivedBadge}
+        <div class="card ${task.id === state.selectedId ? 'active' : ''}${draggable ? ' draggable-pending' : ''}" data-task="${task.id}">
+          <div class="card-row">
+            ${dragHandle}
+            <div class="card-body">
+              <div class="card-title">${escapeHtml(task.title)}</div>
+              <div class="card-tags">
+                <span class="badge template">${escapeHtml(templateName(task.template))}</span>
+                <span class="badge model">${escapeHtml(modelName(task.model_id))}</span>
+                ${phaseChip}${waitChip}${failChip}
+                ${queueHead ? '<span class="badge queue-next">队首</span>' : ''}
+                ${task.git_commit ? '<span class="badge">Git</span>' : ''}
+                ${task.is_complex ? '<span class="badge complex">复杂</span>' : ''}
+                ${archivedBadge}
+              </div>
+            </div>
           </div>
         </div>`;
+    }
+
+    function executionOrderFromDisplay(displayTasks) {
+      return displayTasks.slice().reverse().map((task) => task.id);
+    }
+
+    async function reorderPendingTasks(displayTasks) {
+      const ids = executionOrderFromDisplay(displayTasks);
+      const result = await api('/api/tasks/reorder', {
+        method: 'POST',
+        body: JSON.stringify({ projectId: state.projectId, ids }),
+      });
+      const byId = new Map((result.tasks || []).map((task) => [task.id, task]));
+      state.tasks = state.tasks.map((task) => byId.get(task.id) || task);
+      renderBoard();
+    }
+
+    function bindPendingDragDrop(column, displayTasks) {
+      if (!column || displayTasks.length < 2) return;
+      let dragTaskId = null;
+      let dragMoved = false;
+
+      column.querySelectorAll('.card.draggable-pending').forEach((card) => {
+        const handle = card.querySelector('.card-drag-handle');
+        if (!handle) return;
+
+        handle.addEventListener('dragstart', (event) => {
+          dragTaskId = card.dataset.task;
+          dragMoved = false;
+          card.classList.add('dragging');
+          event.dataTransfer.effectAllowed = 'move';
+          event.dataTransfer.setData('text/plain', dragTaskId);
+        });
+
+        handle.addEventListener('dragend', () => {
+          card.classList.remove('dragging');
+          column.querySelectorAll('.card.drag-over').forEach((item) => item.classList.remove('drag-over'));
+          dragTaskId = null;
+        });
+
+        card.addEventListener('dragover', (event) => {
+          if (!dragTaskId || card.dataset.task === dragTaskId) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'move';
+          column.querySelectorAll('.card.drag-over').forEach((item) => item.classList.remove('drag-over'));
+          card.classList.add('drag-over');
+        });
+
+        card.addEventListener('dragleave', () => {
+          card.classList.remove('drag-over');
+        });
+
+        card.addEventListener('drop', async (event) => {
+          event.preventDefault();
+          card.classList.remove('drag-over');
+          const sourceId = event.dataTransfer.getData('text/plain') || dragTaskId;
+          const targetId = card.dataset.task;
+          if (!sourceId || !targetId || sourceId === targetId) return;
+          const fromIndex = displayTasks.findIndex((task) => task.id === sourceId);
+          const toIndex = displayTasks.findIndex((task) => task.id === targetId);
+          if (fromIndex < 0 || toIndex < 0) return;
+          dragMoved = true;
+          const next = displayTasks.slice();
+          const [moved] = next.splice(fromIndex, 1);
+          next.splice(toIndex, 0, moved);
+          try {
+            await reorderPendingTasks(next);
+          } catch (error) {
+            $('taskError').textContent = error.message;
+            await refreshTasks();
+          }
+        });
+
+        card.addEventListener('click', (event) => {
+          if (dragMoved) {
+            event.stopPropagation();
+            dragMoved = false;
+          }
+        }, true);
+      });
     }
 
     function doneTasksSorted() {
@@ -1299,6 +1729,7 @@
     async function loadArchivedTasks() {
       if (!state.projectId) return;
       state.archivedTasks = await api(`/api/tasks?projectId=${encodeURIComponent(state.projectId)}&archived=1`);
+      state.archivedCount = state.archivedTasks.length;
     }
 
     async function archiveTasks(ids) {
@@ -1352,7 +1783,7 @@
         column.appendChild(archivedSection);
       }
       archivedSection.innerHTML = `
-        <summary>已归档 <span class="count">${state.archivedTasks.length}</span></summary>
+        <summary>已归档 <span class="count">${state.archivedCount}</span></summary>
         <div class="cards archived-cards"></div>`;
       archivedSection.open = state.showArchived;
       archivedSection.ontoggle = async () => {
@@ -1555,6 +1986,10 @@
       $('deployCommandInput').value=state.project.deploy_command||'';
       $('projectGitEnabledEditor').checked=Boolean(state.project.git_enabled);
       $('projectGitPushEditor').checked=Boolean(state.project.git_push);
+      renderProjectDefaultOptions();
+      $('projectSimpleModelEditor').value=state.project.simple_model||'';
+      $('projectComplexModelEditor').value=state.project.complex_model||'';
+      $('projectDefaultTemplateEditor').value=state.project.default_template||defaultTemplateId();
       syncProjectGitEditorVisibility();
       $('projectConfigModal').classList.remove('hidden');
     }
@@ -1589,11 +2024,23 @@
             gitPush:$('projectGitPushEditor').checked,
           })
         });
+        state.project=await api(`/api/projects/${state.projectId}/defaults`,{
+          method:'PATCH',
+          body:JSON.stringify({
+            simpleModel:$('projectSimpleModelEditor').value||null,
+            complexModel:$('projectComplexModelEditor').value||null,
+            defaultTemplate:$('projectDefaultTemplateEditor').value||null,
+          }),
+        });
         state.rules=await api(`/api/projects/${state.projectId}/rules`);
         state.skills=await api(`/api/projects/${state.projectId}/skills`);
         $('projectPath').textContent=formatProjectWorkdirs(state.project);
         renderTaskWorkdirOptions();
         renderProjectDeploy();
+        renderProjectDefaultOptions();
+        renderTemplateOptions();
+        renderTemplateFields();
+        renderModelOptions();
         renderGitCommitOptions();
         renderRules();
         renderSkills();
@@ -1628,8 +2075,9 @@
 
     async function loadHome(){
       state.projects=await api('/api/projects');
+      renderProjectSwitcher();
       $('projectGrid').innerHTML=state.projects.map(project=>`
-        <a class="project-card" href="/?project=${encodeURIComponent(project.id)}" target="_blank">
+        <a class="project-card" href="/?project=${encodeURIComponent(project.id)}" data-project-id="${escapeHtml(project.id)}">
           <h2>${escapeHtml(project.name)} ${project.type==='machine'?'<span class="badge">系统</span>':''}</h2>
           <div class="path">${escapeHtml(formatProjectWorkdirs(project))}</div>
           <div class="stats">
@@ -1641,6 +2089,10 @@
             <span class="stat-item"><b>${(project.counts.awaiting_input||0)+(project.counts.pending_approval||0)}</b><span class="stat-label">待确认</span></span>
           </div>
         </a>`).join('');
+      document.querySelectorAll('[data-project-id]').forEach(card=>card.onclick=(event)=>{
+        event.preventDefault();
+        navigateToProject(card.dataset.projectId);
+      });
     }
 
     function syncProjectGitPushVisibility(){
@@ -1731,7 +2183,9 @@
         column.querySelector('.cards').innerHTML=tasks.map((task,index)=>renderTaskCard(task,{
           queueHead: group==='pending'&&index===tasks.length-1,
           group,
+          draggable: group==='pending',
         })).join('');
+        if(group==='pending')bindPendingDragDrop(column,tasks);
       });
       renderProblemSection();
       document.querySelectorAll('[data-task]').forEach(card=>card.onclick=()=>selectTask(card.dataset.task));
@@ -1741,7 +2195,9 @@
     async function loadProject(){
       state.project=await api(`/api/projects/${state.projectId}`);
       state.tasks=await api(`/api/tasks?projectId=${encodeURIComponent(state.projectId)}`);
+      state.selectedId=null;
       state.archivedTasks=[];
+      state.archivedCount=state.project.archivedCount||0;
       state.doneExpanded=false;
       state.showArchived=false;
       state.rules=await api(`/api/projects/${state.projectId}/rules`);
@@ -1753,10 +2209,12 @@
       renderProjectWorkdirsEditor();
       renderProjectDeploy();
       renderGitCommitOptions();
+      renderProjectDefaultOptions();
       renderTemplateOptions();
       renderTemplateFields();
       renderModelOptions();
       renderRules();renderSkills();renderBoard();updateQueue();
+      renderProjectSwitcher();
     }
 
     function renderProjectDeploy(){
@@ -2000,7 +2458,13 @@
     }
 
     async function refreshTasks(){
-      state.tasks=await api(`/api/tasks?projectId=${encodeURIComponent(state.projectId)}`);
+      const [project, tasks] = await Promise.all([
+        api(`/api/projects/${state.projectId}`),
+        api(`/api/tasks?projectId=${encodeURIComponent(state.projectId)}`),
+      ]);
+      state.project=project;
+      state.tasks=tasks;
+      state.archivedCount=project.archivedCount||0;
       if(state.showArchived)await loadArchivedTasks();
       renderBoard();
       renderProjectDeploy();
@@ -2051,8 +2515,15 @@
       return `
         <div class="steer-panel">
           <h3>执行中对话</h3>
-          <p class="muted" style="margin:0;font-size:11px">发现执行偏差时可补充说明；消息会在当前步骤完成后注入，或尝试中断当前步骤。</p>
+          <p class="muted" style="margin:0;font-size:11px">发现执行偏差时可补充说明；消息会在当前步骤完成后注入，或尝试中断当前步骤。可直接 Ctrl+V 粘贴截图。</p>
           <textarea id="steerMessage" placeholder="例如：这里改错了，应该用 Redis 而不是内存缓存；或者：跳过 mvn test"></textarea>
+          <div class="field-toolbar" style="margin-top:8px">
+            <div class="toolbar">
+              <button type="button" id="steerPasteImageBtn">粘贴图片</button>
+              <input type="file" accept="image/*" class="hidden" id="steerImageInput" multiple />
+            </div>
+          </div>
+          <div class="image-previews" data-image-list="steerMessage"></div>
           <div class="toolbar">
             <button type="button" class="primary" id="sendSteerBtn">发送说明</button>
             ${task.pipeline_mode?'<button type="button" id="skipTestBtn">跳过测试</button>':''}
@@ -2083,6 +2554,7 @@
       $('taskDetailToolbar').innerHTML=toolbarParts.join('');
       $('taskDetailToolbar').classList.toggle('hidden',!toolbarParts.length);
       renderTaskRounds(task,{scrollToBottom});
+      const steerDraft=$('steerMessage')?.value||'';
       const conversationHtml=`${renderSteerPanel(task)}${renderInteraction(task)}`;
       $('taskDetailConversation').innerHTML=conversationHtml;
       $('taskDetailConversation').classList.toggle('hidden',!conversationHtml.trim());
@@ -2098,14 +2570,24 @@
       if(skipTestBtn)skipTestBtn.onclick=()=>submitSteerMessage(task.id,true);
       const cancelTaskBtn=$('cancelTaskBtn');
       if(cancelTaskBtn)cancelTaskBtn.onclick=()=>cancelRunningTask(task.id);
+      const steerMessage=$('steerMessage');
+      if(steerMessage&&steerDraft)steerMessage.value=steerDraft;
+      setupImageField('steerMessage',{
+        textarea:steerMessage,
+        pasteBtn:$('steerPasteImageBtn'),
+        fileInput:$('steerImageInput'),
+        panel:$('taskDetailConversation')?.querySelector('.steer-panel'),
+      });
+      renderImagePreviews('steerMessage');
     }
 
     async function submitSteerMessage(taskId,skipTest){
       const steerError=$('steerError');
       if(steerError)steerError.textContent='';
       const message=$('steerMessage')?.value.trim()||'';
-      if(!skipTest&&!message){
-        if(steerError)steerError.textContent='请填写说明内容';
+      const attachments=collectFieldAttachments('steerMessage');
+      if(!skipTest&&!message&&!attachments.length){
+        if(steerError)steerError.textContent='请填写说明内容或粘贴图片';
         return;
       }
       const sendBtn=$('sendSteerBtn');
@@ -2116,11 +2598,13 @@
         await api(`/api/tasks/${taskId}/message`,{
           method:'POST',
           body:JSON.stringify({
-            message:skipTest&&!message?'跳过测试阶段，直接进入待部署':message,
+            message:skipTest&&!message&&!attachments.length?'跳过测试阶段，直接进入待部署':message,
             skipTest,
+            attachments,
           }),
         });
         if($('steerMessage'))$('steerMessage').value='';
+        clearFieldImages('steerMessage');
         await refreshTasks();
       }catch(error){
         if(steerError)steerError.textContent=error.message;
@@ -2175,6 +2659,7 @@
       const task=state.tasks.find(item=>item.id===taskId)
         ||state.archivedTasks.find(item=>item.id===taskId);
       $('iterateRequirement').value='';
+      clearFieldImages('iterateRequirement');
       $('iterateError').textContent='';
       renderIterateGitOptions(task);
       syncIterateGitPushVisibility();
@@ -2184,6 +2669,7 @@
 
     function closeIterateModal(){
       state.iterateSourceId=null;
+      clearFieldImages('iterateRequirement');
       $('iterateModal').classList.add('hidden');
       $('iterateError').textContent='';
     }
@@ -2191,8 +2677,9 @@
     async function submitIteration(){
       $('iterateError').textContent='';
       const requirement=$('iterateRequirement').value.trim();
-      if(!requirement){
-        $('iterateError').textContent='请填写优化需求';
+      const attachments=collectFieldAttachments('iterateRequirement');
+      if(!requirement&&!attachments.length){
+        $('iterateError').textContent='请填写优化需求或粘贴图片';
         return;
       }
       if(!state.iterateSourceId)return;
@@ -2201,7 +2688,7 @@
       const showGit=Boolean(state.project?.git_enabled&&sourceTask?.pipeline_mode);
       $('iterateSubmitBtn').disabled=true;
       try{
-        const payload={requirement};
+        const payload={requirement,attachments};
         if(showGit){
           payload.gitCommit=$('iterateGitCommitInput').checked;
           payload.gitPush=$('iterateGitPushInput').checked;
@@ -2531,7 +3018,7 @@
       state.eventSource=source;
       source.onopen=()=>{$('connState').textContent='实时连接'};
       source.onerror=()=>{$('connState').textContent='连接中断'};
-      ['task:created','task:status','task:interaction','task:archived'].forEach(name=>source.addEventListener(name,event=>{
+      ['task:created','task:status','task:interaction','task:archived','queue:reordered'].forEach(name=>source.addEventListener(name,event=>{
         const payload=JSON.parse(event.data);
         if(state.projectId&&((payload.project_id===state.projectId)||state.tasks.some(task=>task.id===payload.id)))refreshTasks();
       }));
@@ -2567,6 +3054,21 @@
     async function startBoard(){
       await bootstrap();
       connectSse();
+      $('projectSwitcher').onchange=()=>navigateToProject($('projectSwitcher').value);
+      $('homeBtn').onclick=(event)=>{
+        event.preventDefault();
+        navigateToProject(null);
+      };
+      window.onpopstate=()=>{
+        state.projectId=new URLSearchParams(location.search).get('project');
+        if(state.projectId)showProjectView();
+        else showHomeView();
+      };
+      if(state.projectId){
+        await showProjectView();
+        unlockBoard();
+        return;
+      }
       if(state.projectId){
         $('homeView').classList.add('hidden');$('projectView').classList.remove('hidden');$('homeBtn').classList.remove('hidden');
         $('createTaskBtn').onclick=createTask;$('refreshBtn').onclick=loadProject;
@@ -2596,6 +3098,12 @@
         };
         $('iterateCancelBtn').onclick=closeIterateModal;
         $('iterateSubmitBtn').onclick=submitIteration;
+        setupImageField('iterateRequirement',{
+          textarea:$('iterateRequirement'),
+          pasteBtn:$('iteratePasteImageBtn'),
+          fileInput:$('iterateImageInput'),
+          panel:$('iterateModal')?.querySelector('.modal-panel'),
+        });
         $('iterateGitCommitInput')?.addEventListener('change',syncIterateGitPushVisibility);
         $('iterateModal').onclick=(event)=>{
           if(event.target===$('iterateModal'))closeIterateModal();

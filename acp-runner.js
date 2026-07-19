@@ -1,7 +1,7 @@
 const { execFileSync, spawn } = require('child_process');
 const readline = require('readline');
 const { buildQuestionResponse, buildPlanResponse } = require('./interactions');
-const { assertAgentResultSucceeded } = require('./agent-errors');
+const { assertAgentResultSucceeded, isAgentAbortSummary, isTransientConnectionError } = require('./agent-errors');
 const {
   MAX_TEST_RETRIES,
   MAX_MARKER_RETRIES,
@@ -16,6 +16,7 @@ const {
   shouldSkipTestFromMessage,
   buildGitMessagePrompt,
   parseGitMessage,
+  buildRetryRepairPrompt,
 } = require('./pipeline');
 const {
   captureBaselineDirty,
@@ -24,6 +25,14 @@ const {
   buildCommitMessage,
 } = require('./git-runner');
 const { createAcpLogger } = require('./acp-logger');
+
+const MAX_PROMPT_RETRIES = 2;
+const PROMPT_RETRY_DELAY_MS = 1500;
+const MAX_SESSION_LOG_CHARS = 2 * 1024 * 1024;
+const MAX_TURN_LOG_CHARS = 512 * 1024;
+const MAX_PERMISSION_EVENTS = 1000;
+const MAX_EDITED_PATHS = 10000;
+const MAX_ATTACHMENT_DATA_LENGTH = 3 * 1024 * 1024;
 
 function buildAgentSpawn(agentBin, workdir) {
   if (process.platform !== 'win32') {
@@ -77,6 +86,37 @@ function buildAgentSpawn(agentBin, workdir) {
   };
 }
 
+function killProcessTree(child) {
+  if (!child?.pid) return;
+  if (process.platform === 'win32') {
+    try {
+      spawn('taskkill.exe', ['/pid', String(child.pid), '/t', '/f'], {
+        windowsHide: true,
+        stdio: 'ignore',
+      });
+    } catch {
+      // Best effort; the child may already have exited.
+    }
+    return;
+  }
+  try {
+    child.kill();
+  } catch {
+    // Best effort; the child may already have exited.
+  }
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function assertTurnSucceeded(runner, taskId, summary) {
+  const activeRun = runner.activeRuns.get(taskId);
+  assertAgentResultSucceeded(summary, {
+    cancelled: Boolean(activeRun?.aborted),
+  });
+}
+
 /**
  * Run tasks through Cursor Agent ACP with auto-approval.
  * @author Amadeus
@@ -108,11 +148,7 @@ class AcpRunner {
     run.cancelReason = reason;
     this.pendingInteractions.delete(taskId);
     if (run.interrupt) run.interrupt();
-    try {
-      run.child.kill();
-    } catch {
-      // ignore
-    }
+    killProcessTree(run.child);
     if (!run.finished) {
       run.finish(new Error(reason));
     }
@@ -122,13 +158,14 @@ class AcpRunner {
     const run = this.activeRuns.get(taskId);
     if (!run) throw new Error('任务未在运行中');
     const text = String(message || '').trim();
+    const attachments = normalizeSteerAttachments(options.attachments);
     const skipTest = Boolean(options.skipTest || shouldSkipTestFromMessage(text));
-    if (!text && !skipTest) throw new Error('消息不能为空');
+    if (!text && !skipTest && !attachments.length) throw new Error('消息不能为空');
     if (skipTest) run.flags.skipTest = true;
-    if (text) {
-      run.messageQueue.push(text);
+    if (text || attachments.length) {
+      run.messageQueue.push({ text, attachments });
       run.emit('log', {
-        chunk: `[用户说明] ${text}\n`,
+        chunk: `[用户说明] ${text || '(含图片附件)'}\n`,
         stream: 'system',
       });
     }
@@ -139,7 +176,7 @@ class AcpRunner {
       });
     }
     if (run.interrupt) run.interrupt();
-    return { queued: Boolean(text), skipTest };
+    return { queued: Boolean(text || attachments.length), skipTest };
   }
 
   shouldDenyPermission(params) {
@@ -180,27 +217,38 @@ class AcpRunner {
     return this.runSingleTask(options);
   }
 
-  runSingleTask({ taskId, workdir, workdirs, prompt, attachments = [], mode = 'agent', modelId, resumeSessionId, onEvent, acquireExecuteLock }) {
+  runSingleTask({ taskId, workdir, workdirs, prompt, attachments = [], mode = 'agent', modelId, resumeSessionId, retryError, taskTitle = '', onEvent, acquireExecuteLock }) {
     return this.withSession({
       taskId,
       workdir,
       modelId,
-      mode,
+      mode: retryError ? 'agent' : mode,
       resumeSessionId,
       onEvent,
       run: async (session) => {
-        if (mode !== 'plan') {
+        if (retryError) {
+          if (mode !== 'plan') {
+            await acquireExecuteLock?.();
+          }
+          await session.prompt(buildRetryRepairPrompt(retryError, {
+            taskTitle,
+            taskPrompt: prompt,
+            workdirs,
+          }));
+        } else if (mode !== 'plan') {
           await acquireExecuteLock?.();
+          await session.prompt(appendTitleSuffix(prompt), attachments);
+        } else {
+          await session.prompt(appendTitleSuffix(prompt), attachments);
         }
-        await session.prompt(appendTitleSuffix(prompt), attachments);
-        if (mode === 'plan' && session.context.planAccepted) {
+        if (!retryError && mode === 'plan' && session.context.planAccepted) {
           await acquireExecuteLock?.();
           await session.prompt(
             '计划已经批准。现在切换到执行模式，严格按照已批准的计划完成任务，并在完成后汇报结果。',
           );
         }
         const summary = session.getTurnSummary() || session.getSummary();
-        assertAgentResultSucceeded(summary);
+        assertTurnSucceeded(this, taskId, summary);
         return {
           permissionEvents: session.permissionEvents,
           suggestedTitle: parseTaskTitleMarker(summary),
@@ -228,7 +276,7 @@ class AcpRunner {
       run: async (session) => {
         await session.prompt(prompt, attachments);
         const summary = session.getTurnSummary() || session.getSummary();
-        assertAgentResultSucceeded(summary);
+        assertTurnSucceeded(this, chatSessionId, summary);
         return {
           resultSummary: summary,
         };
@@ -249,6 +297,7 @@ class AcpRunner {
     taskTitle = '',
     planMode = false,
     resumeSessionId,
+    retryError,
     onEvent,
     acquireExecuteLock,
   }) {
@@ -256,7 +305,7 @@ class AcpRunner {
       taskId,
       workdir,
       modelId,
-      mode: planMode ? 'plan' : 'agent',
+      mode: retryError ? 'agent' : (planMode ? 'plan' : 'agent'),
       resumeSessionId,
       onEvent,
       run: async (session) => {
@@ -268,7 +317,16 @@ class AcpRunner {
         };
 
         let baseline = [];
-        if (planMode) {
+        if (retryError) {
+          await acquireExecuteLock?.();
+          if (gitCommit) baseline = await this.git.captureBaselineDirty({ workdirs, workdir });
+          emitPhase('dev', { reason: 'retry_repair' });
+          await session.prompt(buildRetryRepairPrompt(retryError, {
+            taskTitle,
+            taskPrompt: prompt,
+            workdirs,
+          }));
+        } else if (planMode) {
           await session.prompt(appendTitleSuffix(prompt), attachments);
           if (!session.context.planAccepted) {
             throw new Error('Plan 模式未生成可批准的计划');
@@ -314,7 +372,7 @@ class AcpRunner {
             break;
           }
           const testSummary = session.getTurnSummary();
-          assertAgentResultSucceeded(testSummary);
+          assertTurnSucceeded(this, taskId, testSummary);
           const testResult = parseTestResult(testSummary);
           if (testResult.passed) {
             if (testResult.reason === 'inferred_pass') {
@@ -388,7 +446,7 @@ class AcpRunner {
               push: gitPush,
             }));
             const msgSummary = session.getTurnSummary();
-            assertAgentResultSucceeded(msgSummary);
+            assertTurnSucceeded(this, taskId, msgSummary);
             const message = parseGitMessage(msgSummary).message || buildCommitMessage(taskTitle);
             const commitResult = await this.git.commitSelectedUnits({
               units,
@@ -431,7 +489,10 @@ class AcpRunner {
       let finished = false;
       let sessionId = null;
       let turnChunks = [];
+      let sessionLogChars = 0;
+      let turnLogChars = 0;
       let lastTurnSummary = '';
+      let inputReader = null;
 
       const emit = (type, payload) => {
         if (onEvent) onEvent(type, payload);
@@ -457,18 +518,26 @@ class AcpRunner {
         finish: null,
       };
 
+      let timer = null;
       const finish = (err, result) => {
         if (finished) return;
         finished = true;
         activeRun.finished = true;
-        clearTimeout(timer);
+        if (timer) clearTimeout(timer);
         this.pendingInteractions.delete(taskId);
         this.activeRuns.delete(taskId);
+        if (inputReader) inputReader.close();
+        const pendingError = err || new Error('ACP 会话已结束');
+        for (const waiter of pending.values()) {
+          waiter.reject(pendingError);
+        }
+        pending.clear();
         try {
-          child.kill();
+          child.stdin.destroy();
         } catch {
           // ignore
         }
+        killProcessTree(child);
         this.acpLog.write('finish', {
           taskId,
           ok: !err,
@@ -482,72 +551,128 @@ class AcpRunner {
       activeRun.finish = finish;
       this.activeRuns.set(taskId, activeRun);
 
-      const timer = setTimeout(() => {
+      timer = setTimeout(() => {
         finish(new Error(`任务超时（${this.timeoutMs}ms）`));
       }, this.timeoutMs);
 
       const send = (method, params = {}) => {
         const id = msgId++;
         const msg = { jsonrpc: '2.0', id, method, params };
-        child.stdin.write(JSON.stringify(msg) + '\n');
-        return new Promise((res, rej) => pending.set(id, { resolve: res, reject: rej }));
+        return new Promise((res, rej) => {
+          if (finished || child.stdin.destroyed || child.stdin.writableEnded) {
+            rej(new Error('ACP 会话已结束'));
+            return;
+          }
+          pending.set(id, { resolve: res, reject: rej });
+          try {
+            child.stdin.write(`${JSON.stringify(msg)}\n`, (err) => {
+              if (!err || finished) return;
+              const waiter = pending.get(id);
+              if (!waiter) return;
+              pending.delete(id);
+              waiter.reject(err);
+            });
+          } catch (err) {
+            pending.delete(id);
+            rej(err);
+          }
+        });
       };
 
       const respond = (id, result) => {
-        child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\n');
+        if (finished || child.stdin.destroyed || child.stdin.writableEnded) return;
+        try {
+          child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, result })}\n`);
+        } catch {
+          // The agent may have exited while handling an interaction.
+        }
       };
 
       const doSinglePrompt = async (text, attachments = []) => {
         if (activeRun.aborted) {
           throw new Error(activeRun.cancelReason || '用户终止任务');
         }
-        turnChunks = [];
-        const promptBlocks = [{ type: 'text', text }];
-        for (const item of attachments) {
-          if (!item?.mimeType?.startsWith('image/') || !item?.data) continue;
-          promptBlocks.push({
-            type: 'image',
-            mimeType: item.mimeType,
-            data: item.data,
-          });
-        }
-        const promptPromise = send('session/prompt', { sessionId, prompt: promptBlocks });
-        activeRun.interrupt = () => {
-          send('session/cancel', { sessionId }).catch(() => {});
-        };
-        try {
-          await promptPromise;
-        } catch (err) {
-          if (activeRun.aborted) {
+
+        for (let attempt = 0; attempt <= MAX_PROMPT_RETRIES; attempt++) {
+          turnChunks = [];
+          turnLogChars = 0;
+          const promptBlocks = [{ type: 'text', text }];
+          for (const item of attachments) {
+            if (!item?.mimeType?.startsWith('image/') || !item?.data) continue;
+            promptBlocks.push({
+              type: 'image',
+              mimeType: item.mimeType,
+              data: item.data,
+            });
+          }
+          const promptPromise = send('session/prompt', { sessionId, prompt: promptBlocks });
+          activeRun.interrupt = () => {
+            send('session/cancel', { sessionId }).catch(() => {});
+          };
+          try {
+            await promptPromise;
+          } catch (err) {
+            if (activeRun.aborted) {
+              throw new Error(activeRun.cancelReason || '用户终止任务');
+            }
+            if (attempt < MAX_PROMPT_RETRIES && isTransientConnectionError(err)) {
+              emit('log', {
+                chunk: `[system] Agent 连接中断，正在重试（${attempt + 1}/${MAX_PROMPT_RETRIES}）…\n`,
+                stream: 'system',
+              });
+              await delay(PROMPT_RETRY_DELAY_MS);
+              continue;
+            }
+            if (!activeRun.messageQueue.length) throw err;
+          } finally {
+            activeRun.interrupt = null;
+          }
+
+          while (mode === 'plan' && !context.planAccepted && context.planRejectedReason) {
+            const reason = context.planRejectedReason;
+            context.planRejectedReason = null;
+            await send('session/prompt', {
+              sessionId,
+              prompt: [{
+                type: 'text',
+                text: `上一个计划被拒绝。请根据以下反馈重新制定计划，并再次提交确认：${reason}`,
+              }],
+            });
+          }
+
+          lastTurnSummary = turnChunks.join('').trim() || '(无文本输出)';
+
+          if (activeRun.aborted && isAgentAbortSummary(lastTurnSummary)) {
             throw new Error(activeRun.cancelReason || '用户终止任务');
           }
-          if (!activeRun.messageQueue.length) throw err;
-        } finally {
-          activeRun.interrupt = null;
+
+          if (attempt < MAX_PROMPT_RETRIES && isTransientConnectionError(lastTurnSummary)) {
+            emit('log', {
+              chunk: `[system] Agent 连接中断，正在重试（${attempt + 1}/${MAX_PROMPT_RETRIES}）…\n`,
+              stream: 'system',
+            });
+            await delay(PROMPT_RETRY_DELAY_MS);
+            continue;
+          }
+
+          break;
         }
-        while (mode === 'plan' && !context.planAccepted && context.planRejectedReason) {
-          const reason = context.planRejectedReason;
-          context.planRejectedReason = null;
-          await send('session/prompt', {
-            sessionId,
-            prompt: [{
-              type: 'text',
-              text: `上一个计划被拒绝。请根据以下反馈重新制定计划，并再次提交确认：${reason}`,
-            }],
-          });
-        }
-        lastTurnSummary = turnChunks.join('').trim() || '(无文本输出)';
+
         return lastTurnSummary;
       };
 
       const flushSteerMessages = async () => {
         while (activeRun.messageQueue.length && !activeRun.aborted) {
-          const message = activeRun.messageQueue.shift();
+          const item = activeRun.messageQueue.shift();
+          const text = typeof item === 'string' ? item : String(item?.text || '').trim();
+          const steerAttachments = typeof item === 'string'
+            ? []
+            : normalizeSteerAttachments(item?.attachments);
           emit('log', {
             chunk: '[system] 已注入用户说明，继续执行\n',
             stream: 'system',
           });
-          await doSinglePrompt(buildSteerPrompt(message));
+          await doSinglePrompt(buildSteerPrompt(text), steerAttachments);
         }
       };
 
@@ -577,6 +702,15 @@ class AcpRunner {
         }
       });
 
+      child.stdin.on('error', (err) => {
+        if (finished) return;
+        this.acpLog.write('stdin_error', {
+          taskId,
+          error: String(err?.message || err),
+        });
+        finish(err);
+      });
+
       child.on('error', (err) => {
         this.acpLog.write('process_error', { taskId, error: String(err?.message || err) });
         finish(err);
@@ -589,7 +723,8 @@ class AcpRunner {
         }
       });
 
-      readline.createInterface({ input: child.stdout }).on('line', (line) => {
+      inputReader = readline.createInterface({ input: child.stdout });
+      inputReader.on('line', (line) => {
         let msg;
         try {
           msg = JSON.parse(line);
@@ -610,8 +745,9 @@ class AcpRunner {
         if (msg.method === 'session/update') {
           const update = msg.params?.update;
           if (update?.sessionUpdate === 'agent_message_chunk' && update.content?.text) {
-            logChunks.push(update.content.text);
-            turnChunks.push(update.content.text);
+            const text = String(update.content.text);
+            sessionLogChars = appendBounded(logChunks, text, MAX_SESSION_LOG_CHARS, sessionLogChars);
+            turnLogChars = appendBounded(turnChunks, text, MAX_TURN_LOG_CHARS, turnLogChars);
             emit('log', { chunk: update.content.text, stream: 'message' });
           } else if (update?.sessionUpdate === 'agent_thought_chunk' && update.content?.text) {
             emit('log', { chunk: update.content.text, stream: 'thinking' });
@@ -621,7 +757,9 @@ class AcpRunner {
             && Array.isArray(update.locations)
           ) {
             for (const location of update.locations) {
-              if (location?.path) context.editedPaths.push(location.path);
+              if (location?.path && context.editedPaths.length < MAX_EDITED_PATHS) {
+                context.editedPaths.push(location.path);
+              }
             }
           }
           return;
@@ -632,7 +770,7 @@ class AcpRunner {
             msg.params?.toolCall?.title ||
             msg.params?.toolCall?.kind ||
             'unknown';
-          permissionEvents.push({ tool, action: 'requested' });
+          appendBounded(permissionEvents, { tool, action: 'requested' }, MAX_PERMISSION_EVENTS);
           emit('permission', { tool, action: 'requested' });
 
           if (!this.security.autoApprove) {
@@ -653,7 +791,7 @@ class AcpRunner {
             return;
           }
 
-          permissionEvents.push({ tool, action: 'auto' });
+          appendBounded(permissionEvents, { tool, action: 'auto' }, MAX_PERMISSION_EVENTS);
           emit('permission', { tool, action: 'auto' });
           const allowOption = (msg.params?.options || []).find(
             (option) => option.kind === 'allow_once' || option.optionId === 'allow-once',
@@ -763,6 +901,40 @@ class AcpRunner {
       })();
     });
   }
+}
+
+function appendBounded(items, value, limit, currentChars = null) {
+  if (currentChars === null) {
+    items.push(value);
+    if (items.length > limit) items.splice(0, items.length - limit);
+    return;
+  }
+  const text = String(value);
+  items.push(text);
+  let total = currentChars + text.length;
+  while (items.length > 1 && total > limit) {
+    total -= items.shift().length;
+  }
+  if (total > limit) {
+    items[0] = items[0].slice(-limit);
+    total = items[0].length;
+  }
+  return total;
+}
+
+function normalizeSteerAttachments(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => ({
+      mimeType: String(item?.mimeType || '').trim(),
+      data: String(item?.data || '').trim(),
+    }))
+    .filter((item) => (
+      item.mimeType.startsWith('image/')
+      && item.data
+      && item.data.length <= MAX_ATTACHMENT_DATA_LENGTH
+    ))
+    .slice(0, 5);
 }
 
 module.exports = AcpRunner;

@@ -71,7 +71,33 @@ test('TaskQueue.sendTaskMessage 委托 runner 注入说明', () => {
   assert.deepEqual(steered, {
     id: 'task-1',
     message: '改这里',
-    options: { skipTest: false },
+    options: { skipTest: false, attachments: [] },
+  });
+});
+
+test('TaskQueue.sendTaskMessage 支持图片附件', () => {
+  let steered;
+  const { queue } = createControlQueue({
+    runner: {
+      isTaskRunning: () => true,
+      steerTask(id, message, options) {
+        steered = { id, message, options };
+        return { queued: true, skipTest: false };
+      },
+    },
+  });
+
+  queue.sendTaskMessage('task-1', {
+    message: '参考截图',
+    attachments: [{ mimeType: 'image/png', data: 'aGVsbG8=' }],
+  });
+  assert.deepEqual(steered, {
+    id: 'task-1',
+    message: '参考截图',
+    options: {
+      skipTest: false,
+      attachments: [{ mimeType: 'image/png', data: 'aGVsbG8=', field: null }],
+    },
   });
 });
 

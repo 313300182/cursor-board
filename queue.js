@@ -16,6 +16,10 @@ const {
 const { resolveTaskModel } = require('./model-config');
 const { statusForPhase } = require('./pipeline');
 
+const MAX_ATTACHMENT_DATA_LENGTH = 3 * 1024 * 1024;
+const MAX_TOTAL_ATTACHMENT_DATA_LENGTH = 8 * 1024 * 1024;
+const MAX_LOG_CHUNK_CHARS = 64 * 1024;
+
 function buildIterationContextFallback(parentTask) {
   const parts = [
     '【上下文说明】此前已完成一轮任务，会话未能恢复，以下摘要供参考：',
@@ -46,7 +50,7 @@ class TaskQueue {
     this.workdirLock = new WorkdirLock();
     this.scheduler = new ProjectScheduler({
       repo,
-      maxConcurrent: config.queue?.maxConcurrent || 3,
+      maxConcurrent: config.queue?.maxConcurrent || 1,
       runTask: (task) => this.runTask(task),
       workdirLock: this.workdirLock,
     });
@@ -141,9 +145,10 @@ class TaskQueue {
     }
     this.validateTaskWorkdirs(workdirs);
     const workdir = workdirs[0].path;
-    const template = getTemplate(input.template);
+    const templateId = input.template || project.default_template || 'general';
+    const template = getTemplate(templateId);
     if (!template) {
-      throw new Error(`模板不存在: ${input.template}`);
+      throw new Error(`模板不存在: ${templateId}`);
     }
 
     const variables = input.variables || {};
@@ -173,7 +178,9 @@ class TaskQueue {
     const modelId = resolveTaskModel(
       this.config,
       Boolean(input.isComplex),
-      input.modelId,
+      input.modelId || (
+        input.isComplex ? project.complex_model : project.simple_model
+      ),
     );
 
     const now = new Date().toISOString();
@@ -181,7 +188,7 @@ class TaskQueue {
       id: uuidv4(),
       project_id: project.id,
       title,
-      template: input.template,
+      template: templateId,
       variables,
       attachments,
       workdir,
@@ -209,8 +216,9 @@ class TaskQueue {
       throw new Error('仅已完成或待部署任务可发起迭代');
     }
 
+    const attachments = normalizeAttachments(input.attachments);
     const requirement = String(input.requirement || '').trim();
-    if (!requirement) throw new Error('请填写优化需求');
+    if (!requirement && !attachments.length) throw new Error('请填写优化需求');
 
     const iterationTemplate = getTemplate('iteration');
     if (!iterationTemplate) throw new Error('迭代模板不存在');
@@ -256,11 +264,14 @@ class TaskQueue {
       prompt_rendered: promptRendered,
       git_commit: gitCommit,
       variables,
+      attachments,
     });
+    this.repo.appendPendingQueuePosition(id);
+    const queued = this.repo.getTask(id);
     this.repo.addEvent(id, 'status_change', { status: 'pending', reason: 'iterate' });
-    this.broadcast('task:status', updated);
+    this.broadcast('task:status', queued);
     this.kick();
-    return updated;
+    return queued;
   }
 
   retryTask(id) {
@@ -269,18 +280,48 @@ class TaskQueue {
     if (!['failed', 'needs_human'].includes(task.status)) {
       throw new Error('仅 failed / needs_human 状态可重试');
     }
-    const updated = this.repo.updateStatus(id, {
+    const retryError = String(task.error_message || '').trim();
+    const variables = { ...(task.variables || {}) };
+    if (retryError) {
+      variables.__retry_error = retryError;
+    } else {
+      delete variables.__retry_error;
+    }
+    const updated = this.repo.updateForIteration(id, {
       status: 'pending',
       error_message: null,
       result_summary: null,
       started_at: null,
       finished_at: null,
       pipeline_phase: null,
+      session_id: null,
+      variables,
     });
-    this.repo.addEvent(id, 'status_change', { status: 'pending', reason: 'retry' });
-    this.broadcast('task:status', updated);
+    this.repo.appendPendingQueuePosition(id);
+    const queued = this.repo.getTask(id);
+    this.repo.addEvent(id, 'status_change', {
+      status: 'pending',
+      reason: 'retry',
+      retryError: retryError || null,
+    });
+    this.broadcast('task:status', queued);
     this.kick();
-    return updated;
+    return queued;
+  }
+
+  reorderPendingTasks(projectId, orderedIds) {
+    const project = this.projects.getProject(projectId);
+    if (!project) throw new Error('项目不存在');
+    const ids = Array.isArray(orderedIds) ? orderedIds.map(String) : [];
+    if (!ids.length) throw new Error('请选择要排序的任务');
+    const tasks = this.repo.reorderPendingTasks(projectId, ids);
+    this.repo.addEvent(ids[0], 'queue_reorder', {
+      project_id: projectId,
+      ordered_ids: ids,
+    });
+    this.broadcast('queue:reordered', { project_id: projectId, tasks });
+    this.kick();
+    return tasks;
   }
 
   cancelTask(id) {
@@ -302,9 +343,10 @@ class TaskQueue {
     }
     const message = String(input.message || '').trim();
     const skipTest = Boolean(input.skipTest);
-    if (!message && !skipTest) throw new Error('消息不能为空');
-    const result = this.runner.steerTask(id, message, { skipTest });
-    this.repo.addEvent(id, 'user_message', { message, skipTest });
+    const attachments = normalizeAttachments(input.attachments);
+    if (!message && !skipTest && !attachments.length) throw new Error('消息不能为空');
+    const result = this.runner.steerTask(id, message, { skipTest, attachments });
+    this.repo.addEvent(id, 'user_message', { message, skipTest, attachmentCount: attachments.length });
     this.broadcast('task:steer', { id, message, skipTest, ...result });
     return this.repo.getTask(id);
   }
@@ -354,8 +396,15 @@ class TaskQueue {
 
     const onEvent = (type, payload) => {
       if (type === 'log') {
-        this.repo.addEvent(task.id, 'log_chunk', payload);
-        this.broadcast('task:log', { id: task.id, ...payload });
+        const chunk = String(payload?.chunk || '');
+        const safePayload = {
+          ...payload,
+          chunk: chunk.length > MAX_LOG_CHUNK_CHARS
+            ? chunk.slice(-MAX_LOG_CHUNK_CHARS)
+            : chunk,
+        };
+        this.repo.addEvent(task.id, 'log_chunk', safePayload);
+        this.broadcast('task:log', { id: task.id, ...safePayload });
       }
       if (type === 'permission') {
         this.repo.addEvent(task.id, 'permission', payload);
@@ -388,9 +437,15 @@ class TaskQueue {
     try {
       const parentTask = task.parent_task_id ? this.repo.getTask(task.parent_task_id) : null;
       let prompt = task.prompt_rendered;
-      const resumeSessionId = task.session_id || parentTask?.session_id || null;
+      const resumeSessionId = task.parent_task_id ? null : (task.session_id || null);
       if (parentTask && !resumeSessionId) {
         prompt = `${buildIterationContextFallback(parentTask)}\n\n${prompt}`;
+      }
+
+      const retryError = takeRetryError(task);
+      if (retryError) {
+        current = this.repo.updateForIteration(task.id, { variables: retryError.variables });
+        task = { ...current, variables: retryError.variables };
       }
 
       const executeLockPaths = taskWorkdirPaths(task);
@@ -402,6 +457,8 @@ class TaskQueue {
         attachments: task.attachments || [],
         modelId: task.model_id,
         resumeSessionId,
+        retryError: retryError?.message || null,
+        taskTitle: task.title,
         onEvent,
         acquireExecuteLock: () => this.workdirLock.acquire(task.id, executeLockPaths),
       };
@@ -506,11 +563,31 @@ module.exports.isIterableStatus = isIterableStatus;
 
 function normalizeAttachments(raw) {
   if (!Array.isArray(raw)) return [];
-  return raw
-    .map((item) => ({
+  const result = [];
+  let totalLength = 0;
+  for (const item of raw) {
+    const normalized = {
       mimeType: String(item?.mimeType || '').trim(),
       data: String(item?.data || '').trim(),
       field: item?.field ? String(item.field) : null,
-    }))
-    .filter((item) => item.mimeType.startsWith('image/') && item.data);
+    };
+    if (!normalized.mimeType.startsWith('image/') || !normalized.data) continue;
+    if (normalized.data.length > MAX_ATTACHMENT_DATA_LENGTH) {
+      throw new Error('单个图片附件过大');
+    }
+    if (totalLength + normalized.data.length > MAX_TOTAL_ATTACHMENT_DATA_LENGTH) {
+      throw new Error('图片附件总大小过大');
+    }
+    totalLength += normalized.data.length;
+    result.push(normalized);
+  }
+  return result;
+}
+
+function takeRetryError(task) {
+  const message = String(task.variables?.__retry_error || '').trim();
+  if (!message) return null;
+  const variables = { ...(task.variables || {}) };
+  delete variables.__retry_error;
+  return { message, variables };
 }

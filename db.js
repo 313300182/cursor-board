@@ -3,6 +3,9 @@ const path = require('path');
 const Database = require('better-sqlite3');
 
 const DATA_DIR = path.join(__dirname, 'data');
+const MAX_LOG_EVENTS_PER_TASK = 2000;
+const MAX_LOG_EVENT_BYTES_PER_TASK = 8 * 1024 * 1024;
+const LOG_EVENT_PRUNE_INTERVAL = 256;
 
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
@@ -14,6 +17,30 @@ function ensureColumn(db, table, name, definition) {
   const columns = db.pragma(`table_info(${table})`);
   if (!columns.some((column) => column.name === name)) {
     db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
+  }
+}
+
+function backfillPendingQueuePositions(db) {
+  const projects = db.prepare(`
+    SELECT DISTINCT project_id AS project_id
+    FROM tasks
+    WHERE status = 'pending'
+      AND archived = 0
+      AND queue_position IS NULL
+      AND project_id IS NOT NULL
+  `).all();
+  if (!projects.length) return;
+  const listPending = db.prepare(`
+    SELECT id FROM tasks
+    WHERE project_id = ?
+      AND status = 'pending'
+      AND archived = 0
+    ORDER BY created_at ASC, id ASC
+  `);
+  const updatePosition = db.prepare('UPDATE tasks SET queue_position = ? WHERE id = ?');
+  for (const { project_id: projectId } of projects) {
+    const rows = listPending.all(projectId);
+    rows.forEach((row, index) => updatePosition.run(index + 1, row.id));
   }
 }
 
@@ -29,6 +56,9 @@ function ensureSchema(db) {
       deploy_error TEXT,
       deploy_started_at TEXT,
       deploy_finished_at TEXT,
+      simple_model TEXT,
+      complex_model TEXT,
+      default_template TEXT,
       is_system INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL
     );
@@ -109,8 +139,13 @@ function ensureSchema(db) {
   ensureColumn(db, 'projects', 'workdirs_json', 'TEXT');
   ensureColumn(db, 'projects', 'git_enabled', 'INTEGER NOT NULL DEFAULT 0');
   ensureColumn(db, 'projects', 'git_push', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn(db, 'projects', 'simple_model', 'TEXT');
+  ensureColumn(db, 'projects', 'complex_model', 'TEXT');
+  ensureColumn(db, 'projects', 'default_template', 'TEXT');
   ensureColumn(db, 'tasks', 'workdirs_json', 'TEXT');
   ensureColumn(db, 'tasks', 'git_commit', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn(db, 'tasks', 'queue_position', 'INTEGER');
+  backfillPendingQueuePositions(db);
   db.exec(`
     UPDATE projects
     SET workdirs_json = json_array(json_object('path', workdir))
@@ -212,6 +247,7 @@ function mapTask(row) {
     archived_at: row.archived_at || null,
     session_id: row.session_id || null,
     parent_task_id: row.parent_task_id || null,
+    queue_position: row.queue_position == null ? null : Number(row.queue_position),
     interaction: row.interaction_json ? JSON.parse(row.interaction_json) : null,
   };
 }
@@ -225,6 +261,9 @@ function mapProject(row) {
     workdir: workdirs[0]?.path || row.workdir || null,
     git_enabled: Boolean(row.git_enabled),
     git_push: Boolean(row.git_push),
+    simple_model: row.simple_model || null,
+    complex_model: row.complex_model || null,
+    default_template: row.default_template || null,
   };
 }
 
@@ -249,9 +288,11 @@ function createProjectRepo(db) {
       const primaryWorkdir = workdirs[0]?.path || project.workdir || null;
       db.prepare(`
         INSERT INTO projects (
-          id, name, type, workdir, workdirs_json, deploy_command, git_enabled, git_push, is_system, created_at
+          id, name, type, workdir, workdirs_json, deploy_command, git_enabled, git_push,
+          simple_model, complex_model, default_template, is_system, created_at
         ) VALUES (
-          @id, @name, @type, @workdir, @workdirs_json, @deploy_command, @git_enabled, @git_push, @is_system, @created_at
+          @id, @name, @type, @workdir, @workdirs_json, @deploy_command, @git_enabled, @git_push,
+          @simple_model, @complex_model, @default_template, @is_system, @created_at
         )
       `).run({
         id: project.id,
@@ -262,6 +303,9 @@ function createProjectRepo(db) {
         deploy_command: project.type === 'machine' ? null : (project.deploy_command || null),
         git_enabled: project.type === 'machine' ? 0 : (project.git_enabled ? 1 : 0),
         git_push: project.type === 'machine' ? 0 : (project.git_push ? 1 : 0),
+        simple_model: project.type === 'machine' ? null : (project.simple_model || null),
+        complex_model: project.type === 'machine' ? null : (project.complex_model || null),
+        default_template: project.type === 'machine' ? null : (project.default_template || null),
         is_system: project.is_system || 0,
         created_at: project.created_at,
       });
@@ -311,6 +355,23 @@ function createProjectRepo(db) {
       return this.getProject(id);
     },
 
+    updateProjectDefaults(id, patch) {
+      const project = this.getProject(id);
+      if (!project) throw new Error('项目不存在');
+      if (project.type === 'machine') throw new Error('本机项目不支持默认配置');
+      db.prepare(`
+        UPDATE projects
+        SET simple_model = ?, complex_model = ?, default_template = ?
+        WHERE id = ?
+      `).run(
+        patch.simpleModel || null,
+        patch.complexModel || null,
+        patch.defaultTemplate || null,
+        id,
+      );
+      return this.getProject(id);
+    },
+
     ensureDeployCommandForWorkdir(workdir, deployCommand) {
       db.prepare(`
         UPDATE projects
@@ -350,10 +411,10 @@ function createTaskRepo(db) {
   const insertTask = db.prepare(`
     INSERT INTO tasks (
       id, project_id, title, template, variables, attachments_json, workdir, workdirs_json, status,
-      is_complex, pipeline_mode, git_commit, model_id, prompt_rendered, parent_task_id, created_at
+      is_complex, pipeline_mode, git_commit, model_id, prompt_rendered, parent_task_id, queue_position, created_at
     ) VALUES (
       @id, @project_id, @title, @template, @variables, @attachments_json, @workdir, @workdirs_json, @status,
-      @is_complex, @pipeline_mode, @git_commit, @model_id, @prompt_rendered, @parent_task_id, @created_at
+      @is_complex, @pipeline_mode, @git_commit, @model_id, @prompt_rendered, @parent_task_id, @queue_position, @created_at
     )
   `);
 
@@ -363,7 +424,21 @@ function createTaskRepo(db) {
   `);
 
   return {
+    getNextQueuePosition(projectId) {
+      const row = db.prepare(`
+        SELECT MAX(queue_position) AS max_pos
+        FROM tasks
+        WHERE project_id = ?
+          AND status = 'pending'
+          AND archived = 0
+      `).get(projectId);
+      return (row?.max_pos || 0) + 1;
+    },
+
     createTask(task) {
+      const queuePosition = task.status === 'pending' && task.project_id
+        ? (task.queue_position ?? this.getNextQueuePosition(task.project_id))
+        : null;
       insertTask.run({
         id: task.id,
         project_id: task.project_id || null,
@@ -380,6 +455,7 @@ function createTaskRepo(db) {
         model_id: task.model_id || null,
         prompt_rendered: task.prompt_rendered,
         parent_task_id: task.parent_task_id || null,
+        queue_position: queuePosition,
         created_at: task.created_at,
       });
       return this.getTask(task.id);
@@ -406,7 +482,40 @@ function createTaskRepo(db) {
         clauses.push('archived = 0');
       }
       const where = clauses.length ? ` WHERE ${clauses.join(' AND ')}` : '';
-      return db.prepare(`SELECT * FROM tasks${where} ORDER BY created_at ASC`).all(...params).map(mapTask);
+      const orderBy = status === 'pending'
+        ? 'COALESCE(queue_position, 9223372036854775807) ASC, created_at ASC, id ASC'
+        : 'created_at ASC';
+      return db.prepare(`SELECT * FROM tasks${where} ORDER BY ${orderBy}`).all(...params).map(mapTask);
+    },
+
+    appendPendingQueuePosition(id) {
+      const task = this.getTask(id);
+      if (!task) throw new Error('任务不存在');
+      const next = this.getNextQueuePosition(task.project_id);
+      db.prepare('UPDATE tasks SET queue_position = ? WHERE id = ?').run(next, id);
+      return this.getTask(id);
+    },
+
+    reorderPendingTasks(projectId, orderedIds) {
+      const pending = db.prepare(`
+        SELECT id FROM tasks
+        WHERE project_id = ?
+          AND status = 'pending'
+          AND archived = 0
+        ORDER BY COALESCE(queue_position, 9223372036854775807) ASC, created_at ASC, id ASC
+      `).all(projectId).map((row) => row.id);
+      const expected = [...pending].sort();
+      const received = [...orderedIds].sort();
+      if (expected.length !== received.length || !expected.every((id, index) => id === received[index])) {
+        throw new Error('任务列表已变化，请刷新后重试');
+      }
+      const apply = db.transaction((ids) => {
+        ids.forEach((taskId, index) => {
+          db.prepare('UPDATE tasks SET queue_position = ? WHERE id = ?').run(index + 1, taskId);
+        });
+      });
+      apply(orderedIds);
+      return orderedIds.map((taskId) => this.getTask(taskId));
     },
 
     updateStatus(id, patch) {
@@ -449,11 +558,20 @@ function createTaskRepo(db) {
       if (Object.prototype.hasOwnProperty.call(patch, 'variables')) {
         values.variables = JSON.stringify(patch.variables || {});
       }
-      const variableAssignment = Object.prototype.hasOwnProperty.call(patch, 'variables')
-        ? `${assignments ? `${assignments}, ` : ''}variables = @variables`
-        : assignments;
-      if (!variableAssignment) return this.getTask(id);
-      db.prepare(`UPDATE tasks SET ${variableAssignment} WHERE id = @id`).run(values);
+      if (Object.prototype.hasOwnProperty.call(patch, 'attachments')) {
+        values.attachments_json = JSON.stringify(patch.attachments || []);
+      }
+      let sqlAssignments = assignments;
+      if (Object.prototype.hasOwnProperty.call(patch, 'variables')) {
+        sqlAssignments = sqlAssignments ? `${sqlAssignments}, variables = @variables` : 'variables = @variables';
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, 'attachments')) {
+        sqlAssignments = sqlAssignments
+          ? `${sqlAssignments}, attachments_json = @attachments_json`
+          : 'attachments_json = @attachments_json';
+      }
+      if (!sqlAssignments) return this.getTask(id);
+      db.prepare(`UPDATE tasks SET ${sqlAssignments} WHERE id = @id`).run(values);
       return this.getTask(id);
     },
 
@@ -520,12 +638,38 @@ function createTaskRepo(db) {
     },
 
     addEvent(taskId, type, payload) {
-      insertEvent.run({
+      const result = insertEvent.run({
         task_id: taskId,
         type,
         payload: JSON.stringify(payload || {}),
         created_at: new Date().toISOString(),
       });
+      if (type === 'log_chunk' && Number(result.lastInsertRowid) % LOG_EVENT_PRUNE_INTERVAL === 0) {
+        db.prepare(`
+          DELETE FROM task_events
+          WHERE task_id = ?
+            AND type = 'log_chunk'
+            AND id NOT IN (
+              SELECT id
+              FROM (
+                SELECT
+                  id,
+                  SUM(length(payload)) OVER (ORDER BY id DESC) AS total_bytes,
+                  ROW_NUMBER() OVER (ORDER BY id DESC) AS row_number
+                FROM task_events
+                WHERE task_id = ?
+                  AND type = 'log_chunk'
+              )
+              WHERE total_bytes <= ?
+                AND row_number <= ?
+            )
+        `).run(
+          taskId,
+          taskId,
+          MAX_LOG_EVENT_BYTES_PER_TASK,
+          MAX_LOG_EVENTS_PER_TASK,
+        );
+      }
     },
 
     listEvents(taskId) {

@@ -218,6 +218,43 @@ test('iterateTask 默认启用 Git 提交并支持单独控制 push', () => {
   }
 });
 
+test('iterateTask 保存图片附件并允许仅图片迭代', () => {
+  const { queue, repo, cleanup } = createIterateQueue();
+  try {
+    const source = repo.createTask({
+      id: 'image-source',
+      project_id: 'board',
+      title: 'UI 优化',
+      template: 'feature',
+      variables: { requirement: '优化按钮' },
+      workdir: process.cwd(),
+      status: 'done',
+      is_complex: false,
+      pipeline_mode: true,
+      model_id: 'opus-id',
+      prompt_rendered: 'prompt',
+      created_at: new Date().toISOString(),
+    });
+    repo.updateStatus(source.id, { status: 'done', finished_at: new Date().toISOString() });
+
+    const attachments = [{
+      field: 'requirement',
+      mimeType: 'image/png',
+      data: 'aGVsbG8=',
+    }];
+    const iteration = queue.iterateTask(source.id, {
+      requirement: '',
+      attachments,
+    });
+
+    assert.equal(iteration.attachments.length, 1);
+    assert.equal(iteration.attachments[0].mimeType, 'image/png');
+    assert.equal(iteration.attachments[0].data, 'aGVsbG8=');
+  } finally {
+    cleanup();
+  }
+});
+
 test('iterateTask 拒绝非可迭代状态与空需求', () => {
   const { queue, repo, cleanup } = createIterateQueue();
   try {

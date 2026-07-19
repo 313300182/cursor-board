@@ -66,6 +66,6 @@
     "autoAcceptPlan": true
   },
   "queue": {
-    "maxConcurrent": 3
+    "maxConcurrent": 1
   }
 }

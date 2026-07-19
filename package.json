@@ -7,6 +7,7 @@
     "start": "node server.js",
     "deploy": "node scripts/deploy-board.js",
     "probe": "node scripts/acp-probe.js",
+    "ui:shot": "node scripts/ui-shot.js",
     "test": "node --test --test-concurrency=2 test/*.test.js"
   },
   "author": "Amadeus",
@@ -16,5 +17,8 @@
     "croner": "^9.1.0",
     "express": "^4.21.2",
     "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "playwright": "^1.61.1"
   }
 }

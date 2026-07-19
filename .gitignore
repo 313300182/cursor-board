@@ -3,3 +3,4 @@ data/
 *.db
 probe-test.txt
 shell-out.txt
+.ui-shots/

@@ -1,0 +1,30 @@
+---
+description: 前端视觉自检——改动任何界面后用 ui:shot 截图读图自纠
+globs: public/**/*.{html,css,js},**/*.vue,**/*.tsx,**/*.jsx,**/*.css
+alwaysApply: false
+---
+
+# 前端视觉自检闭环
+
+改动前端（`public/**`、样式、组件）后，不要仅凭代码判断效果，务必"看图"确认。
+
+## 工作流
+
+1. 改完界面后运行：`npm run ui:shot`
+2. 用读图能力查看产物截图：
+   - `.ui-shots/home.png`（项目中心/首页）
+   - `.ui-shots/board.png`（看板五列 + 异常区）
+3. 阅读 `.ui-shots/report.json` 与终端摘要，重点检查：
+   - `overlapCount`/`overlaps`：兄弟元素矩形互相压盖 → 文字重叠，必修
+   - `horizontalOverflow`：出现横向溢出 → 布局越界，需修复
+   - `scrollerCount > 1`：疑似"里外都能滚"的嵌套滚动条 → 收敛为单一滚动区
+   - `consoleErrors`：运行期报错 → 优先修
+   - 截图含首页、看板与**新建任务弹窗（展开任务类型网格）**三个视图
+4. 对照 `ui-design-system` 规则核对对齐、间距、信息密度，发现问题就改，改完重跑本流程，直到截图与报告都干净。
+
+## 说明
+
+- 脚本零副作用：内存 SQLite + 预置样例数据 + 免登录 token，不碰真实 `data/`。
+- 换视口宽度排查响应式：`node scripts/ui-shot.js --width 1280`。
+- 要截真实运行中的看板：`node scripts/ui-shot.js --url http://127.0.0.1:3920`（token 默认读 `data/.token`）。
+- 声明式判断"改好了"之前，必须先看过最新截图。

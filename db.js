@@ -111,6 +111,7 @@ function ensureSchema(db) {
       session_id TEXT NOT NULL,
       role TEXT NOT NULL,
       content TEXT NOT NULL DEFAULT '',
+      attachments_json TEXT,
       stream TEXT,
       created_at TEXT NOT NULL,
       FOREIGN KEY (session_id) REFERENCES chat_sessions(id)
@@ -158,6 +159,7 @@ function ensureSchema(db) {
   ensureColumn(db, 'tasks', 'interaction_json', 'TEXT');
   ensureColumn(db, 'tasks', 'model_id', 'TEXT');
   ensureColumn(db, 'tasks', 'attachments_json', 'TEXT');
+  ensureColumn(db, 'chat_messages', 'attachments_json', 'TEXT');
   ensureColumn(db, 'tasks', 'pipeline_mode', 'INTEGER NOT NULL DEFAULT 0');
   ensureColumn(db, 'tasks', 'pipeline_phase', 'TEXT');
   ensureColumn(db, 'tasks', 'deploy_completed', 'INTEGER NOT NULL DEFAULT 0');
@@ -847,6 +849,7 @@ function mapChatMessage(row) {
     session_id: row.session_id,
     role: row.role,
     content: row.content,
+    attachments: row.attachments_json ? JSON.parse(row.attachments_json) : [],
     stream: row.stream || null,
     created_at: row.created_at,
   };
@@ -862,8 +865,8 @@ function createChatRepo(db) {
   `);
 
   const insertMessage = db.prepare(`
-    INSERT INTO chat_messages (session_id, role, content, stream, created_at)
-    VALUES (@session_id, @role, @content, @stream, @created_at)
+    INSERT INTO chat_messages (session_id, role, content, attachments_json, stream, created_at)
+    VALUES (@session_id, @role, @content, @attachments_json, @stream, @created_at)
   `);
 
   return {
@@ -945,6 +948,7 @@ function createChatRepo(db) {
         session_id: sessionId,
         role: message.role,
         content: message.content || '',
+        attachments_json: JSON.stringify(message.attachments || []),
         stream: message.stream || null,
         created_at: now,
       });

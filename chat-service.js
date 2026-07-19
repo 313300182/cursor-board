@@ -111,15 +111,16 @@ class ChatService {
       throw new Error('请先回答 Agent 的问题');
     }
     const message = String(input.message || '').trim();
-    if (!message) throw new Error('消息不能为空');
     const attachments = normalizeAttachments(input.attachments, {
       trimValues: false,
       maxItems: 5,
     });
+    if (!message && !attachments.length) throw new Error('消息不能为空');
     const now = new Date().toISOString();
     const userMessage = this.chatRepo.addMessage(sessionId, {
       role: 'user',
       content: message,
+      attachments,
       created_at: now,
     });
     let updated = session;

@@ -256,7 +256,11 @@ class TaskQueue {
       round: closedRound,
       summary: source.result_summary || '',
     });
-    this.repo.addEvent(id, 'iteration_start', { round: nextRound, requirement });
+    this.repo.addEvent(id, 'iteration_start', {
+      round: nextRound,
+      requirement,
+      attachments,
+    });
     this.repo.setInteraction(id, null);
 
     const updated = this.repo.updateForIteration(id, {
@@ -361,7 +365,12 @@ class TaskQueue {
     const attachments = normalizeAttachments(input.attachments, { includeField: true });
     if (!message && !skipTest && !attachments.length) throw new Error('消息不能为空');
     const result = this.runner.steerTask(id, message, { skipTest, attachments });
-    this.repo.addEvent(id, 'user_message', { message, skipTest, attachmentCount: attachments.length });
+    this.repo.addEvent(id, 'user_message', {
+      message,
+      skipTest,
+      attachments,
+      attachmentCount: attachments.length,
+    });
     this.broadcast('task:steer', { id, message, skipTest, ...result });
     return this.repo.getTask(id);
   }

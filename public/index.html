@@ -451,6 +451,14 @@
     .image-preview{position:relative;width:72px;height:72px;border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;background:var(--bg)}
     .image-preview img{width:100%;height:100%;object-fit:cover;display:block}
     .image-preview button{position:absolute;top:2px;right:2px;width:20px;height:20px;padding:0;border-radius:50%;font-size:12px;line-height:1;background:rgba(0,0,0,.6);color:var(--text);border:none}
+    .image-preview img,.attachment-preview img{cursor:zoom-in}
+    .attachment-gallery{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+    .attachment-preview{width:96px;height:96px;padding:0;border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;background:var(--bg);cursor:zoom-in}
+    .attachment-preview:hover{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-subtle)}
+    .attachment-preview img{width:100%;height:100%;object-fit:cover;display:block}
+    .task-user-message{margin:10px 0;padding:10px 12px;border:1px solid color-mix(in srgb,var(--accent) 28%,var(--border));border-radius:var(--radius-lg);background:var(--accent-subtle)}
+    .task-user-message-label{font-size:10px;font-weight:600;color:var(--accent-hover);margin-bottom:5px}
+    .task-user-message .chat-text{font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}
     .task-detail-panel{display:flex;flex-direction:column;overflow:hidden}
     .task-detail-header{
       display:flex;
@@ -561,6 +569,10 @@
     }
     .task-detail-close{padding:4px 10px;font-size:12px;flex-shrink:0}
     .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:110;display:flex;align-items:center;justify-content:center;padding:16px}
+    .image-preview-modal-panel{position:relative;display:flex;align-items:center;justify-content:center;max-width:min(92vw,1200px);max-height:92vh;padding:28px;background:rgba(12,14,18,.94);border:1px solid var(--border-strong);border-radius:var(--radius-lg)}
+    .image-preview-modal-panel img{display:block;max-width:86vw;max-height:84vh;object-fit:contain}
+    .image-preview-close{position:absolute;top:6px;right:8px;width:28px;height:28px;padding:0;border:0;background:transparent;color:var(--text);font-size:24px;line-height:1;cursor:pointer}
+    .image-preview-close:hover{color:var(--accent-hover)}
     .modal-panel{
       background:var(--surface);
       border:1px solid var(--border);
@@ -675,6 +687,8 @@
     @keyframes chatTyping{0%,80%,100%{opacity:.35;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
     .chat-compose{border-top:1px solid var(--border);padding:12px 14px;display:flex;flex-direction:column;gap:8px;background:var(--surface)}
     .chat-compose textarea{min-height:72px;max-height:180px;font-size:13px}
+    .chat-compose .image-previews{margin-top:0}
+    .chat-attachment-button{width:auto!important;font-size:12px!important;padding:7px 10px!important}
     .chat-compose-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
     .chat-compose-actions button{font-size:12px;padding:7px 12px}
     .chat-status-bar{font-size:11px;color:var(--text-3);padding:0 14px 10px}
@@ -1101,6 +1115,12 @@
       </div>
     </div>
   </div>
+  <div id="imagePreviewModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="图片预览">
+    <div class="image-preview-modal-panel">
+      <button type="button" id="imagePreviewCloseBtn" class="image-preview-close" aria-label="关闭图片预览">×</button>
+      <img id="imagePreviewImage" alt="图片预览" />
+    </div>
+  </div>
 
   <script src="/task-display.js"></script>
   <script src="/chat-display.js"></script>
@@ -1130,6 +1150,22 @@
     };
     const recentProjectIdsKey='cursorBoardRecentProjects';
     const $ = (id) => document.getElementById(id);
+
+    document.addEventListener('click',(event)=>{
+      const target=event.target.closest('[data-image-preview]');
+      if(target){
+        const src=target.dataset.imagePreview;
+        if(src){
+          $('imagePreviewImage').src=src;
+          $('imagePreviewModal').classList.remove('hidden');
+        }
+        return;
+      }
+      if(event.target===$('imagePreviewModal')||event.target.closest('#imagePreviewCloseBtn')){
+        $('imagePreviewModal').classList.add('hidden');
+        $('imagePreviewImage').removeAttribute('src');
+      }
+    });
 
     function headers(){return {'Content-Type':'application/json',Authorization:`Bearer ${state.token}`}}
     async function api(path,options={}){
@@ -1708,7 +1744,7 @@
       const images=state.fieldImages[fieldName]||[];
       container.innerHTML=images.map(item=>`
         <div class="image-preview">
-          <img src="${item.preview}" alt="附件" />
+          <img src="${item.preview}" alt="附件，点击预览" data-image-preview="${escapeHtml(item.preview)}" />
           <button type="button" data-remove-image="${escapeHtml(fieldName)}" data-image-id="${escapeHtml(item.id)}" title="移除">×</button>
         </div>`).join('');
       container.querySelectorAll('[data-remove-image]').forEach(button=>{
@@ -3438,7 +3474,10 @@
           <div id="chatStatusBar" class="chat-status-bar">${escapeHtml(chatStatusText(session))}</div>
           <div class="chat-compose">
             <textarea id="chatInput" placeholder="输入问题或想法，Enter 发送，Shift+Enter 换行" ${session&&(session.status==='running'||session.status==='awaiting_input')?'disabled':''}></textarea>
+            <div class="image-previews" data-image-list="chatMessage"></div>
             <div class="chat-compose-actions">
+              <button type="button" id="chatPasteImageBtn" class="chat-attachment-button">添加图片</button>
+              <input type="file" accept="image/*" class="hidden" id="chatImageInput" multiple />
               ${session?.status==='running'?'<button type="button" id="chatCancelBtn" class="danger">停止</button>':''}
               <button type="button" id="chatSendBtn" class="primary" ${session&&(session.status==='running'||session.status==='awaiting_input')?'disabled':''}>发送</button>
             </div>
@@ -3462,6 +3501,13 @@
         };
         if(!session||!(session.status==='running'||session.status==='awaiting_input'))setTimeout(()=>input.focus(),0);
       }
+      setupImageField('chatMessage',{
+        textarea:input,
+        pasteBtn:$('chatPasteImageBtn'),
+        fileInput:$('chatImageInput'),
+        panel:$('chatModal')?.querySelector('.chat-compose'),
+      });
+      renderImagePreviews('chatMessage');
       const box=$('chatMessages');
       if(box)box.scrollTop=box.scrollHeight;
     }
@@ -3530,8 +3576,9 @@
       if(!session)return;
       const input=$('chatInput');
       const message=input?.value.trim()||'';
-      if(!message){
-        if($('chatError'))$('chatError').textContent='请输入消息';
+      const attachments=collectFieldAttachments('chatMessage');
+      if(!message&&!attachments.length){
+        if($('chatError'))$('chatError').textContent='请输入消息或添加图片';
         return;
       }
       if($('chatError'))$('chatError').textContent='';
@@ -3539,12 +3586,13 @@
       try{
         const updated=await api(`/api/chats/${encodeURIComponent(session.id)}/messages`,{
           method:'POST',
-          body:JSON.stringify({message}),
+          body:JSON.stringify({message,attachments}),
         });
         state.chat.sessionsById[session.id]=updated;
         state.chat.sessions=state.chat.sessions.map(item=>item.id===session.id?{...item,...updated}:item);
         state.chat.streamChunks[session.id]=[];
         if(input)input.value='';
+        clearFieldImages('chatMessage');
         await loadChatMessages(session.id);
         renderChatModal();
       }catch(error){

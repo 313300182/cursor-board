@@ -26,16 +26,26 @@
     return `<pre>${escapeHtml(value)}</pre>`;
   }
 
+  function renderAttachments(attachments) {
+    return (attachments || []).filter((item) => item?.mimeType?.startsWith('image/') && item.data)
+      .map((item, index) => {
+        const src = `data:${escapeHtml(item.mimeType)};base64,${escapeHtml(item.data)}`;
+        return `<button type="button" class="attachment-preview" data-image-preview="${src}" aria-label="预览图片 ${index + 1}"><img src="${src}" alt="图片附件 ${index + 1}" /></button>`;
+      }).join('');
+  }
+
   function renderMessageBubble(message, options = {}) {
     const role = message.role || 'assistant';
     const content = message.content || '';
     const body = role === 'assistant'
       ? `<div class="markdown">${formatMarkdown(content)}</div>`
       : `<div class="chat-text">${escapeHtml(content)}</div>`;
+    const attachments = renderAttachments(message.attachments);
     return `
       <div class="chat-bubble ${role}${options.streaming ? ' streaming' : ''}">
         <div class="chat-bubble-label">${role === 'user' ? '你' : 'Agent'}</div>
         ${body}
+        ${attachments ? `<div class="attachment-gallery">${attachments}</div>` : ''}
       </div>`;
   }
 
@@ -83,6 +93,7 @@
 
   return {
     escapeHtml,
+    renderAttachments,
     formatMarkdown,
     renderMessageBubble,
     renderStreamingBubble,

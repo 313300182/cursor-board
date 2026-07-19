@@ -88,6 +88,12 @@
     return chunks;
   }
 
+  function parseTaskUserMessages(events) {
+    return (events || [])
+      .filter((event) => event.type === 'user_message')
+      .map((event) => event.payload || {});
+  }
+
   function appendLogChunk(chunks, payload) {
     const next = Array.isArray(chunks) ? chunks : [];
     next.push({
@@ -137,6 +143,23 @@
       return `<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`;
     });
     return result;
+  }
+
+  function renderAttachments(attachments) {
+    return (attachments || []).filter((item) => item?.mimeType?.startsWith('image/') && item.data)
+      .map((item, index) => {
+        const src = `data:${escapeHtml(item.mimeType)};base64,${escapeHtml(item.data)}`;
+        return `<button type="button" class="attachment-preview" data-image-preview="${src}" aria-label="预览图片 ${index + 1}"><img src="${src}" alt="图片附件 ${index + 1}" /></button>`;
+      }).join('');
+  }
+
+  function renderUserMessagesHtml(messages) {
+    return (messages || []).map((message) => {
+      const text = escapeHtml(message.message || '');
+      const attachments = renderAttachments(message.attachments);
+      if (!text && !attachments) return '';
+      return `<div class="task-user-message"><div class="task-user-message-label">你的补充说明</div>${text ? `<div class="chat-text">${text}</div>` : ''}${attachments ? `<div class="attachment-gallery">${attachments}</div>` : ''}</div>`;
+    }).join('');
   }
 
   function parseTableRow(line) {
@@ -489,6 +512,8 @@
         iterationStarts.push({
           index,
           round: event.payload?.round || iterationStarts.length + 2,
+          requirement: event.payload?.requirement || '',
+          attachments: event.payload?.attachments || [],
         });
       }
     }
@@ -503,6 +528,7 @@
         label: roundLabel(roundNum),
         chunks: parseTaskLogEvents(list.slice(segmentStart, start.index)),
         summary: iterationSummaries.get(roundNum) || '',
+        userMessages: parseTaskUserMessages(list.slice(segmentStart, start.index)),
         complete: true,
       });
       segmentStart = start.index + 1;
@@ -516,8 +542,18 @@
       label: roundLabel(roundNum),
       chunks: currentChunks,
       summary: complete ? String(task?.result_summary || '').trim() : '',
+      userMessages: parseTaskUserMessages(list.slice(segmentStart)),
       complete,
     });
+    for (let index = 1; index < rounds.length; index += 1) {
+      const start = iterationStarts[index - 1];
+      if (start?.requirement || start?.attachments?.length) {
+        rounds[index].userMessages.unshift({
+          message: start.requirement,
+          attachments: start.attachments,
+        });
+      }
+    }
     return rounds;
   }
 
@@ -531,11 +567,13 @@
   function renderTaskPromptHtml(task, round) {
     if (round?.round !== 1) return '';
     const prompt = String(task?.prompt_rendered || '').trim();
-    if (!prompt) return '';
+    const attachments = renderAttachments(task?.attachments);
+    if (!prompt && !attachments) return '';
     return [
       '<section class="output-section task-prompt-section">',
       '<h3>给 AI 的提示词</h3>',
-      `<pre class="task-prompt-box">${escapeHtml(prompt)}</pre>`,
+      prompt ? `<pre class="task-prompt-box">${escapeHtml(prompt)}</pre>` : '',
+      attachments ? `<div class="attachment-gallery">${attachments}</div>` : '',
       '</section>',
     ].join('');
   }
@@ -557,6 +595,7 @@
       `<section class="iteration-round" data-round="${round.round}">`,
       `<div class="iteration-round-label">${escapeHtml(round.label)}</div>`,
       renderTaskPromptHtml(task, round),
+      renderUserMessagesHtml(round.userMessages),
       '<section class="output-section">',
       '<h3>实时输出</h3>',
       `<div class="log-stream" data-round="${round.round}">${renderLogStreamHtml(round.chunks, logOptions)}</div>`,
@@ -581,6 +620,7 @@
         label: roundLabel(1),
         chunks: [],
         summary: '',
+        userMessages: [],
         complete: isCompletedRoundStatus(task?.status),
       }, task, options);
     }
@@ -592,12 +632,15 @@
     sortTasksForGroup,
     normalizeLogStream,
     parseTaskLogEvents,
+    parseTaskUserMessages,
     appendLogChunk,
     appendPermissionChunk,
     summaryPlaceholder,
     resolveTaskSummary,
     escapeHtml,
     renderTaskPromptHtml,
+    renderAttachments,
+    renderUserMessagesHtml,
     formatInlineMarkdown,
     formatMarkdown,
     mergeLogChunksForDisplay,

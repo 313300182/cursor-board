@@ -27,6 +27,11 @@ function isAgentAbortSummary(text) {
     || (/\[aborted\]/i.test(raw) && isTransientConnectionError(raw));
 }
 
+function isModelUnavailableError(errOrText) {
+  const text = String(errOrText?.message || errOrText || '');
+  return /\[unavailable\]/i.test(text);
+}
+
 function formatAgentTerminalError(text) {
   const raw = String(text || '').trim();
   if (isTransientConnectionError(raw) || isAgentAbortSummary(raw)) {
@@ -49,5 +54,6 @@ module.exports = {
   assertAgentResultSucceeded,
   formatAgentTerminalError,
   isAgentAbortSummary,
+  isModelUnavailableError,
   isTransientConnectionError,
 };

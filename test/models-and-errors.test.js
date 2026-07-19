@@ -2,7 +2,12 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 
 const { getModelSettings, resolveTaskModel } = require('../model-config');
-const { assertAgentResultSucceeded, isAgentAbortSummary, isTransientConnectionError } = require('../agent-errors');
+const {
+  assertAgentResultSucceeded,
+  isAgentAbortSummary,
+  isModelUnavailableError,
+  isTransientConnectionError,
+} = require('../agent-errors');
 
 const config = {
   cursor: {
@@ -58,6 +63,11 @@ test('ECONNRESET 连接中断会被识别为可重试错误', () => {
     () => assertAgentResultSucceeded(summary),
     /Agent 连接中断，请稍后重试/,
   );
+});
+
+test('ACP 模型不可用错误会被识别', () => {
+  assert.equal(isModelUnavailableError('Error: T: [unavailable] Error'), true);
+  assert.equal(isModelUnavailableError('模型配置格式错误'), false);
 });
 
 test('用户终止时 abort 摘要转为友好取消信息', () => {

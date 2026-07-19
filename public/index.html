@@ -622,7 +622,6 @@
     .modal-section:first-of-type{margin-top:0;padding-top:0;border-top:none}
     .modal-section h4{margin:0 0 10px;font-size:13px;font-weight:600;color:var(--text-2)}
     .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
-    .modal-actions.modal-actions-sticky{position:sticky;bottom:0;background:var(--surface);padding:12px 0 4px;margin-top:16px;border-top:1px solid var(--border);z-index:1}
     .config-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 22px}
     .config-grid>.modal-section{margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}
     .config-grid>.modal-section:nth-of-type(-n+2){margin-top:6px;padding-top:0;border-top:none}
@@ -956,7 +955,7 @@
         </div>
       </div>
       <div id="projectConfigError" class="error"></div>
-      <div class="modal-actions modal-actions-sticky">
+      <div class="modal-actions">
         <button type="button" id="projectConfigCancelBtn">取消</button>
         <button type="submit" id="projectConfigSaveBtn" class="primary">保存配置</button>
       </div>

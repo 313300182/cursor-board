@@ -4,6 +4,7 @@
   "category": "通用",
   "order": 1,
   "description": "任意本地开发或文件处理任务，适合没有明确分类的场景",
+  "defaults": { "pipeline": false, "git": false, "complex": false },
   "variables": [
     {
       "name": "description",

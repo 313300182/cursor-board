@@ -9,6 +9,7 @@ const { createTemplatesRouter } = require('./routes/templates');
 const { createProjectsRouter } = require('./routes/projects');
 const { createTasksRouter } = require('./routes/tasks');
 const { createChatsRouter } = require('./routes/chats');
+const { createSchedulesRouter } = require('./routes/schedules');
 const { createEventsRouter } = require('./routes/events');
 
 function createApp(deps) {
@@ -22,6 +23,10 @@ function createApp(deps) {
     projectDeployer,
     chatService,
     broadcaster,
+    projectTemplates,
+    scheduleRepo,
+    templateService,
+    scheduleScheduler,
     root = ROOT,
   } = deps;
 
@@ -40,6 +45,10 @@ function createApp(deps) {
     projectDeployer,
     chatService,
     broadcaster,
+    projectTemplates,
+    scheduleRepo,
+    templateService,
+    scheduleScheduler,
     root,
   };
 
@@ -49,6 +58,7 @@ function createApp(deps) {
   app.use('/api/projects', createProjectsRouter(routeDeps));
   app.use('/api/tasks', createTasksRouter(routeDeps));
   app.use('/api/chats', createChatsRouter(routeDeps));
+  app.use('/api', createSchedulesRouter(routeDeps));
   app.use('/api', createEventsRouter(routeDeps));
 
   app.use(errorHandler);

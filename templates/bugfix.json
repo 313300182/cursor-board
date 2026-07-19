@@ -4,6 +4,7 @@
   "category": "开发",
   "order": 3,
   "description": "定位并修复项目中的缺陷，尽量附带测试验证",
+  "defaults": { "pipeline": true, "git": true, "complex": false },
   "variables": [
     {
       "name": "description",

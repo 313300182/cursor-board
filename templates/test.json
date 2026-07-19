@@ -4,6 +4,7 @@
   "category": "质量",
   "order": 3,
   "description": "为指定模块补充单元测试或集成测试，提高覆盖率",
+  "defaults": { "pipeline": false, "git": false, "complex": false },
   "variables": [
     {
       "name": "target",

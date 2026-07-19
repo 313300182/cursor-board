@@ -4,6 +4,7 @@
   "category": "质量",
   "order": 2,
   "description": "分析并优化代码性能、资源占用或响应速度，给出可量化的改进建议",
+  "defaults": { "pipeline": false, "git": false, "complex": false },
   "variables": [
     {
       "name": "target",

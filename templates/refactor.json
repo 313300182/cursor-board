@@ -4,6 +4,7 @@
   "category": "开发",
   "order": 4,
   "description": "在不改变外部行为的前提下，改善代码结构与可维护性",
+  "defaults": { "pipeline": true, "git": true, "complex": false },
   "variables": [
     {
       "name": "target",

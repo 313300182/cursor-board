@@ -117,7 +117,41 @@ function ensureSchema(db) {
     );
     CREATE INDEX IF NOT EXISTS idx_chat_sessions_project_id ON chat_sessions(project_id);
     CREATE INDEX IF NOT EXISTS idx_chat_messages_session_id ON chat_messages(session_id);
+    CREATE TABLE IF NOT EXISTS project_templates (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      category TEXT,
+      description TEXT,
+      defaults_json TEXT,
+      variables_json TEXT,
+      prompt TEXT NOT NULL DEFAULT '',
+      sort_order INTEGER,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_project_templates_project_id ON project_templates(project_id);
+    CREATE TABLE IF NOT EXISTS schedules (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      template_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      variables_json TEXT,
+      trigger TEXT NOT NULL DEFAULT 'manual',
+      cron_expr TEXT,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      last_run_at TEXT,
+      last_task_id TEXT,
+      last_status TEXT,
+      next_run_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_schedules_project_id ON schedules(project_id);
   `);
+  ensureColumn(db, 'schedules', 'workdirs_json', 'TEXT');
   ensureColumn(db, 'tasks', 'project_id', 'TEXT');
   ensureColumn(db, 'tasks', 'is_complex', 'INTEGER NOT NULL DEFAULT 0');
   ensureColumn(db, 'tasks', 'plan_text', 'TEXT');
@@ -142,9 +176,11 @@ function ensureSchema(db) {
   ensureColumn(db, 'projects', 'simple_model', 'TEXT');
   ensureColumn(db, 'projects', 'complex_model', 'TEXT');
   ensureColumn(db, 'projects', 'default_template', 'TEXT');
+  ensureColumn(db, 'projects', 'enabled_templates', 'TEXT');
   ensureColumn(db, 'tasks', 'workdirs_json', 'TEXT');
   ensureColumn(db, 'tasks', 'git_commit', 'INTEGER NOT NULL DEFAULT 0');
   ensureColumn(db, 'tasks', 'queue_position', 'INTEGER');
+  ensureColumn(db, 'tasks', 'source_schedule_id', 'TEXT');
   backfillPendingQueuePositions(db);
   db.exec(`
     UPDATE projects
@@ -247,6 +283,7 @@ function mapTask(row) {
     archived_at: row.archived_at || null,
     session_id: row.session_id || null,
     parent_task_id: row.parent_task_id || null,
+    source_schedule_id: row.source_schedule_id || null,
     queue_position: row.queue_position == null ? null : Number(row.queue_position),
     interaction: row.interaction_json ? JSON.parse(row.interaction_json) : null,
   };
@@ -264,7 +301,18 @@ function mapProject(row) {
     simple_model: row.simple_model || null,
     complex_model: row.complex_model || null,
     default_template: row.default_template || null,
+    enabled_templates: parseEnabledTemplates(row.enabled_templates),
   };
+}
+
+function parseEnabledTemplates(value) {
+  if (value == null) return null;
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.map((id) => String(id)) : null;
+  } catch (_) {
+    return null;
+  }
 }
 
 function createProjectRepo(db) {
@@ -372,6 +420,16 @@ function createProjectRepo(db) {
       return this.getProject(id);
     },
 
+    updateEnabledTemplates(id, ids) {
+      const project = this.getProject(id);
+      if (!project) throw new Error('项目不存在');
+      const value = Array.isArray(ids)
+        ? JSON.stringify(ids.map((item) => String(item)))
+        : null;
+      db.prepare('UPDATE projects SET enabled_templates = ? WHERE id = ?').run(value, id);
+      return this.getProject(id);
+    },
+
     ensureDeployCommandForWorkdir(workdir, deployCommand) {
       db.prepare(`
         UPDATE projects
@@ -411,10 +469,12 @@ function createTaskRepo(db) {
   const insertTask = db.prepare(`
     INSERT INTO tasks (
       id, project_id, title, template, variables, attachments_json, workdir, workdirs_json, status,
-      is_complex, pipeline_mode, git_commit, model_id, prompt_rendered, parent_task_id, queue_position, created_at
+      is_complex, pipeline_mode, git_commit, model_id, prompt_rendered, parent_task_id, source_schedule_id,
+      queue_position, created_at
     ) VALUES (
       @id, @project_id, @title, @template, @variables, @attachments_json, @workdir, @workdirs_json, @status,
-      @is_complex, @pipeline_mode, @git_commit, @model_id, @prompt_rendered, @parent_task_id, @queue_position, @created_at
+      @is_complex, @pipeline_mode, @git_commit, @model_id, @prompt_rendered, @parent_task_id, @source_schedule_id,
+      @queue_position, @created_at
     )
   `);
 
@@ -455,6 +515,7 @@ function createTaskRepo(db) {
         model_id: task.model_id || null,
         prompt_rendered: task.prompt_rendered,
         parent_task_id: task.parent_task_id || null,
+        source_schedule_id: task.source_schedule_id || null,
         queue_position: queuePosition,
         created_at: task.created_at,
       });
@@ -918,6 +979,254 @@ function createChatRepo(db) {
   };
 }
 
+function mapProjectTemplate(row) {
+  if (!row) return null;
+  let defaults = null;
+  let variables = [];
+  try {
+    defaults = row.defaults_json ? JSON.parse(row.defaults_json) : null;
+  } catch (_) {
+    defaults = null;
+  }
+  try {
+    const parsed = row.variables_json ? JSON.parse(row.variables_json) : [];
+    variables = Array.isArray(parsed) ? parsed : [];
+  } catch (_) {
+    variables = [];
+  }
+  return {
+    id: row.id,
+    project_id: row.project_id,
+    name: row.name,
+    category: row.category || '项目',
+    description: row.description || '',
+    defaults: defaults || {},
+    variables,
+    prompt: row.prompt || '',
+    order: row.sort_order == null ? null : Number(row.sort_order),
+    scope: 'project',
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
+function createProjectTemplateRepo(db) {
+  const insertTemplate = db.prepare(`
+    INSERT INTO project_templates (
+      id, project_id, name, category, description, defaults_json, variables_json, prompt, sort_order,
+      created_at, updated_at
+    ) VALUES (
+      @id, @project_id, @name, @category, @description, @defaults_json, @variables_json, @prompt, @sort_order,
+      @created_at, @updated_at
+    )
+  `);
+
+  return {
+    list(projectId) {
+      return db.prepare(`
+        SELECT * FROM project_templates
+        WHERE project_id = ?
+        ORDER BY sort_order ASC, created_at ASC
+      `).all(projectId).map(mapProjectTemplate);
+    },
+
+    get(id) {
+      return mapProjectTemplate(db.prepare('SELECT * FROM project_templates WHERE id = ?').get(id));
+    },
+
+    getForProject(projectId, id) {
+      return mapProjectTemplate(
+        db.prepare('SELECT * FROM project_templates WHERE id = ? AND project_id = ?').get(id, projectId),
+      );
+    },
+
+    create(template) {
+      const now = new Date().toISOString();
+      insertTemplate.run({
+        id: template.id,
+        project_id: template.project_id,
+        name: template.name,
+        category: template.category || '项目',
+        description: template.description || '',
+        defaults_json: JSON.stringify(template.defaults || {}),
+        variables_json: JSON.stringify(template.variables || []),
+        prompt: template.prompt || '',
+        sort_order: template.order == null ? null : Number(template.order),
+        created_at: template.created_at || now,
+        updated_at: template.updated_at || now,
+      });
+      return this.get(template.id);
+    },
+
+    update(id, patch) {
+      const assignments = [];
+      const values = { id, updated_at: new Date().toISOString() };
+      const setField = (column, key, transform) => {
+        if (!Object.prototype.hasOwnProperty.call(patch, key)) return;
+        assignments.push(`${column} = @${column}`);
+        values[column] = transform ? transform(patch[key]) : patch[key];
+      };
+      setField('name', 'name');
+      setField('category', 'category');
+      setField('description', 'description');
+      setField('defaults_json', 'defaults', (value) => JSON.stringify(value || {}));
+      setField('variables_json', 'variables', (value) => JSON.stringify(value || []));
+      setField('prompt', 'prompt');
+      setField('sort_order', 'order', (value) => (value == null ? null : Number(value)));
+      if (!assignments.length) return this.get(id);
+      assignments.push('updated_at = @updated_at');
+      db.prepare(`UPDATE project_templates SET ${assignments.join(', ')} WHERE id = @id`).run(values);
+      return this.get(id);
+    },
+
+    delete(id) {
+      db.prepare('DELETE FROM project_templates WHERE id = ?').run(id);
+    },
+  };
+}
+
+function mapSchedule(row) {
+  if (!row) return null;
+  let variables = {};
+  try {
+    variables = row.variables_json ? JSON.parse(row.variables_json) : {};
+  } catch (_) {
+    variables = {};
+  }
+  return {
+    id: row.id,
+    project_id: row.project_id,
+    template_id: row.template_id,
+    name: row.name,
+    variables: variables || {},
+    workdirs: parseWorkdirsJson(row.workdirs_json, null),
+    trigger: row.trigger || 'manual',
+    cron_expr: row.cron_expr || null,
+    enabled: Boolean(row.enabled),
+    last_run_at: row.last_run_at || null,
+    last_task_id: row.last_task_id || null,
+    last_status: row.last_status || null,
+    next_run_at: row.next_run_at || null,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
+function createScheduleRepo(db) {
+  const insertSchedule = db.prepare(`
+    INSERT INTO schedules (
+      id, project_id, template_id, name, variables_json, workdirs_json, trigger, cron_expr, enabled,
+      created_at, updated_at
+    ) VALUES (
+      @id, @project_id, @template_id, @name, @variables_json, @workdirs_json, @trigger, @cron_expr, @enabled,
+      @created_at, @updated_at
+    )
+  `);
+
+  const serializeWorkdirs = (workdirs) => {
+    const normalized = normalizeWorkdirs(workdirs || []);
+    return normalized.length ? JSON.stringify(normalized) : null;
+  };
+
+  return {
+    list(projectId) {
+      return db.prepare(`
+        SELECT * FROM schedules
+        WHERE project_id = ?
+        ORDER BY created_at ASC
+      `).all(projectId).map(mapSchedule);
+    },
+
+    listAll() {
+      return db.prepare('SELECT * FROM schedules ORDER BY created_at ASC').all().map(mapSchedule);
+    },
+
+    listAllEnabledCron() {
+      return db.prepare(`
+        SELECT * FROM schedules
+        WHERE enabled = 1 AND trigger = 'cron' AND cron_expr IS NOT NULL AND trim(cron_expr) != ''
+        ORDER BY created_at ASC
+      `).all().map(mapSchedule);
+    },
+
+    get(id) {
+      return mapSchedule(db.prepare('SELECT * FROM schedules WHERE id = ?').get(id));
+    },
+
+    getForProject(projectId, id) {
+      return mapSchedule(
+        db.prepare('SELECT * FROM schedules WHERE id = ? AND project_id = ?').get(id, projectId),
+      );
+    },
+
+    create(schedule) {
+      const now = new Date().toISOString();
+      insertSchedule.run({
+        id: schedule.id,
+        project_id: schedule.project_id,
+        template_id: schedule.template_id,
+        name: schedule.name,
+        variables_json: JSON.stringify(schedule.variables || {}),
+        workdirs_json: serializeWorkdirs(schedule.workdirs),
+        trigger: schedule.trigger === 'cron' ? 'cron' : 'manual',
+        cron_expr: schedule.cron_expr || null,
+        enabled: schedule.enabled === false ? 0 : 1,
+        created_at: schedule.created_at || now,
+        updated_at: schedule.updated_at || now,
+      });
+      return this.get(schedule.id);
+    },
+
+    update(id, patch) {
+      const assignments = [];
+      const values = { id };
+      const setField = (column, key, transform) => {
+        if (!Object.prototype.hasOwnProperty.call(patch, key)) return;
+        assignments.push(`${column} = @${column}`);
+        values[column] = transform ? transform(patch[key]) : patch[key];
+      };
+      setField('template_id', 'template_id');
+      setField('name', 'name');
+      setField('variables_json', 'variables', (value) => JSON.stringify(value || {}));
+      setField('workdirs_json', 'workdirs', (value) => serializeWorkdirs(value));
+      setField('trigger', 'trigger', (value) => (value === 'cron' ? 'cron' : 'manual'));
+      setField('cron_expr', 'cron_expr', (value) => value || null);
+      setField('enabled', 'enabled', (value) => (value ? 1 : 0));
+      if (!assignments.length) return this.get(id);
+      assignments.push('updated_at = @updated_at');
+      values.updated_at = new Date().toISOString();
+      db.prepare(`UPDATE schedules SET ${assignments.join(', ')} WHERE id = @id`).run(values);
+      return this.get(id);
+    },
+
+    recordRun(id, patch = {}) {
+      const assignments = [];
+      const values = { id };
+      const setField = (column, key) => {
+        if (!Object.prototype.hasOwnProperty.call(patch, key)) return;
+        assignments.push(`${column} = @${column}`);
+        values[column] = patch[key];
+      };
+      setField('last_run_at', 'last_run_at');
+      setField('last_task_id', 'last_task_id');
+      setField('last_status', 'last_status');
+      setField('next_run_at', 'next_run_at');
+      if (!assignments.length) return this.get(id);
+      db.prepare(`UPDATE schedules SET ${assignments.join(', ')} WHERE id = @id`).run(values);
+      return this.get(id);
+    },
+
+    setNextRun(id, nextRunAt) {
+      db.prepare('UPDATE schedules SET next_run_at = ? WHERE id = ?').run(nextRunAt || null, id);
+      return this.get(id);
+    },
+
+    delete(id) {
+      db.prepare('DELETE FROM schedules WHERE id = ?').run(id);
+    },
+  };
+}
+
 module.exports = {
   DATA_DIR,
   ensureDataDir,
@@ -926,6 +1235,8 @@ module.exports = {
   createProjectRepo,
   createTaskRepo,
   createChatRepo,
+  createProjectTemplateRepo,
+  createScheduleRepo,
   normalizeWorkdirs,
   parseProjectWorkdirs,
   parseTaskWorkdirs,

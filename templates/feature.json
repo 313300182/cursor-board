@@ -5,6 +5,7 @@
   "order": 1,
   "pipeline": true,
   "description": "开发 → 测试 → Git 提交（可选）→ 等待项目部署，测试失败自动打回开发",
+  "defaults": { "pipeline": true, "git": true, "complex": false },
   "variables": [
     {
       "name": "requirement",

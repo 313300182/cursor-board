@@ -138,6 +138,24 @@
     .workdir-row{display:grid;grid-template-columns:88px minmax(0,1fr) auto;gap:8px;align-items:center}
     .workdir-row input{margin:0}
     .workdir-row button{width:auto;padding:7px 10px;font-size:12px}
+    .tasktype-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+    @media(max-width:720px){.tasktype-columns{grid-template-columns:1fr}}
+    .tasktype-col-head{font-size:13px;font-weight:600;color:var(--text-2);margin-bottom:6px}
+    .tasktype-list{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+    .tasktype-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface-2)}
+    .tasktype-row .tt-main{min-width:0}
+    .tasktype-row .tt-name{font-weight:600;font-size:13px}
+    .tasktype-row .tt-meta{font-size:11px;color:var(--muted)}
+    .tasktype-row .tt-actions{display:flex;gap:6px;flex:none}
+    .tasktype-row .tt-actions button{width:auto;padding:5px 9px;font-size:12px}
+    .tasktype-private-head{display:flex;align-items:center;justify-content:space-between;margin-top:14px;margin-bottom:6px}
+    .tasktype-private-head button{width:auto;padding:6px 11px;font-size:12px}
+    .var-editor-list{display:flex;flex-direction:column;gap:8px;margin-top:4px}
+    .var-editor-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 96px auto;gap:6px;align-items:center;border:1px solid var(--border);border-radius:var(--radius-lg);padding:8px;background:var(--surface-2)}
+    .var-editor-row input,.var-editor-row select{margin:0}
+    .var-editor-row .var-flags{display:flex;gap:10px;align-items:center;grid-column:1 / -1;font-size:12px;color:var(--muted)}
+    .var-editor-row .var-flags label{display:flex;align-items:center;gap:4px;margin:0}
+    .var-editor-row button{width:auto;padding:5px 9px;font-size:12px}
     .workdirs-section{border:1px solid var(--border);border-radius:var(--radius-lg);margin-top:16px;background:var(--surface-2);overflow:hidden}
     .workdirs-section summary{cursor:pointer;font-weight:600;padding:9px 11px;font-size:13px;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:8px}
     .workdirs-section summary::-webkit-details-marker{display:none}
@@ -471,6 +489,21 @@
       min-height:0;
     }
     .task-detail-panel .summary-box{color:var(--content)}
+    .task-prompt-box{
+      margin:0;
+      max-height:360px;
+      overflow:auto;
+      background:var(--surface-2);
+      border:1px solid var(--border);
+      padding:10px;
+      border-radius:var(--radius-lg);
+      color:var(--content);
+      font-family:"JetBrains Mono",ui-monospace,monospace;
+      font-size:11px;
+      line-height:1.6;
+      white-space:pre-wrap;
+      overflow-wrap:break-word;
+    }
     .log-lazy-trigger{
       display:block;
       width:100%;
@@ -538,7 +571,8 @@
     }
     .modal-panel h3{margin:0 0 6px;font-size:16px;font-weight:600}
     .modal-panel .muted{margin-bottom:12px;font-size:12px}
-    .modal-panel.modal-wide{width:min(640px,96vw)}
+    .modal-panel.modal-wide{width:min(720px,96vw);max-height:92vh;overflow-y:auto}
+    .modal-panel.modal-xwide{width:min(960px,96vw)}
     .modal-panel.rules-modal-panel,
     .modal-panel.task-detail-panel,
     .modal-panel.chat-modal-panel{
@@ -553,6 +587,14 @@
     .modal-section:first-of-type{margin-top:0;padding-top:0;border-top:none}
     .modal-section h4{margin:0 0 10px;font-size:13px;font-weight:600;color:var(--text-2)}
     .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+    .modal-actions.modal-actions-sticky{position:sticky;bottom:0;background:var(--surface);padding:12px 0 4px;margin-top:16px;border-top:1px solid var(--border);z-index:1}
+    .config-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 22px}
+    .config-grid>.modal-section{margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}
+    .config-grid>.modal-section:nth-of-type(-n+2){margin-top:6px;padding-top:0;border-top:none}
+    .config-grid>.modal-section.span-2{grid-column:1 / -1}
+    @media(max-width:720px){.config-grid{grid-template-columns:1fr}.config-grid>.modal-section:nth-of-type(2){margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}}
+    #globalTemplateList{max-height:260px;overflow-y:auto;padding-right:2px}
+    #privateTemplateList{max-height:260px;overflow-y:auto;padding-right:2px}
     body.auth-locked>header,body.auth-locked>.container{visibility:hidden}
     .login-gate{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;background:radial-gradient(circle at 50% 20%,rgba(75,139,245,.10),transparent 42%),var(--bg)}
     .login-panel{width:min(390px,100%);padding:28px;background:var(--surface);border:1px solid var(--border-strong);border-radius:12px;box-shadow:0 24px 80px rgba(0,0,0,.42)}
@@ -704,6 +746,7 @@
           <div><h2 id="projectHeading">任务看板</h2><div id="projectPath" class="muted"></div></div>
           <div class="toolbar">
             <button type="button" id="projectChatBtn">项目对话</button>
+            <button type="button" id="schedulesBtn" class="hidden">常驻任务</button>
             <button type="button" id="rulesBtn" class="hidden">Cursor Rules</button>
             <button type="button" id="skillsBtn" class="hidden">Cursor Skills</button>
             <button type="button" id="projectConfigBtn" class="hidden">项目配置</button>
@@ -784,45 +827,148 @@
   </div>
 
   <div id="projectConfigModal" class="modal-backdrop hidden">
-    <form id="projectConfigForm" class="modal-panel modal-wide" role="dialog" aria-labelledby="projectConfigTitle">
+    <form id="projectConfigForm" class="modal-panel modal-wide modal-xwide" role="dialog" aria-labelledby="projectConfigTitle">
       <h3 id="projectConfigTitle">项目配置</h3>
-      <p class="muted">管理工作目录、部署命令与 Git 关联，保存后立即生效。</p>
-      <div class="modal-section">
-        <h4>工作目录</h4>
-        <div id="projectWorkdirsEditor" class="workdir-list"></div>
-        <button type="button" id="addProjectWorkdirEditorBtn" style="width:100%;margin-top:8px">添加目录</button>
-      </div>
-      <div class="modal-section">
-        <h4>部署命令</h4>
-        <input id="deployCommandInput" placeholder="例如：npm run deploy" />
-      </div>
-      <div class="modal-section">
-        <h4>Git 关联</h4>
-        <div class="switch-row" style="margin-top:0">
-          <div><strong>启用 Git</strong><div class="muted" style="font-size:11px">启用后任务测试通过可自动提交代码</div></div>
-          <label class="switch"><input id="projectGitEnabledEditor" type="checkbox"><span class="slider"></span></label>
+      <p class="muted">管理工作目录、部署命令、Git 关联与任务类型，保存后立即生效。</p>
+      <div class="config-grid">
+        <div class="modal-section">
+          <h4>工作目录</h4>
+          <div id="projectWorkdirsEditor" class="workdir-list"></div>
+          <button type="button" id="addProjectWorkdirEditorBtn" style="width:100%;margin-top:8px">添加目录</button>
         </div>
-        <div id="projectGitPushEditorWrap" class="switch-row hidden">
-          <div><strong>提交后推送</strong><div class="muted" style="font-size:11px">Git 提交成功后自动 push</div></div>
-          <label class="switch"><input id="projectGitPushEditor" type="checkbox"><span class="slider"></span></label>
+        <div class="modal-section">
+          <h4>部署命令</h4>
+          <input id="deployCommandInput" placeholder="例如：npm run deploy" />
+          <div class="muted" style="font-size:11px;margin-top:8px">任务待部署后由此命令执行部署。</div>
         </div>
-      </div>
-      <div class="modal-section">
-        <h4>任务默认值</h4>
-        <label for="projectSimpleModelEditor">简单模式模型</label>
-        <select id="projectSimpleModelEditor"></select>
-        <label for="projectComplexModelEditor">复杂模式模型</label>
-        <select id="projectComplexModelEditor"></select>
-        <label for="projectDefaultTemplateEditor">默认任务类型</label>
-        <select id="projectDefaultTemplateEditor"></select>
-        <div class="muted" style="font-size:11px;margin-top:8px">新建任务未手动选择时使用这些默认值。</div>
+        <div class="modal-section">
+          <h4>Git 关联</h4>
+          <div class="switch-row" style="margin-top:0">
+            <div><strong>启用 Git</strong><div class="muted" style="font-size:11px">启用后任务测试通过可自动提交代码</div></div>
+            <label class="switch"><input id="projectGitEnabledEditor" type="checkbox"><span class="slider"></span></label>
+          </div>
+          <div id="projectGitPushEditorWrap" class="switch-row hidden">
+            <div><strong>提交后推送</strong><div class="muted" style="font-size:11px">Git 提交成功后自动 push</div></div>
+            <label class="switch"><input id="projectGitPushEditor" type="checkbox"><span class="slider"></span></label>
+          </div>
+        </div>
+        <div class="modal-section">
+          <h4>任务默认值</h4>
+          <label for="projectSimpleModelEditor">简单模式模型</label>
+          <select id="projectSimpleModelEditor"></select>
+          <label for="projectComplexModelEditor">复杂模式模型</label>
+          <select id="projectComplexModelEditor"></select>
+          <label for="projectDefaultTemplateEditor">默认任务类型</label>
+          <select id="projectDefaultTemplateEditor"></select>
+          <div class="muted" style="font-size:11px;margin-top:8px">新建任务未手动选择时使用这些默认值。</div>
+        </div>
+        <div class="modal-section span-2">
+          <h4>任务类型</h4>
+          <div class="muted" style="font-size:11px;margin-bottom:8px">勾选启用的全局类型（通用任务必选），或添加项目私有类型。</div>
+          <div class="tasktype-columns">
+            <div class="tasktype-col">
+              <div class="tasktype-col-head">全局类型</div>
+              <div id="globalTemplateList" class="tasktype-list"></div>
+            </div>
+            <div class="tasktype-col">
+              <div class="tasktype-private-head" style="margin-top:0">
+                <strong style="font-size:13px">项目私有类型</strong>
+                <button type="button" id="addPrivateTemplateBtn">新增私有类型</button>
+              </div>
+              <div id="privateTemplateList" class="tasktype-list"></div>
+            </div>
+          </div>
+        </div>
       </div>
       <div id="projectConfigError" class="error"></div>
-      <div class="modal-actions">
+      <div class="modal-actions modal-actions-sticky">
         <button type="button" id="projectConfigCancelBtn">取消</button>
         <button type="submit" id="projectConfigSaveBtn" class="primary">保存配置</button>
       </div>
     </form>
+  </div>
+
+  <div id="templateEditorModal" class="modal-backdrop hidden">
+    <form id="templateEditorForm" class="modal-panel modal-wide" role="dialog" aria-labelledby="templateEditorTitle">
+      <h3 id="templateEditorTitle">私有任务类型</h3>
+      <p class="muted">项目私有的任务类型，仅在本项目可用。提示词可用 {{workdirs_detail}} 及各变量占位。</p>
+      <label for="tplEditorName">名称</label>
+      <input id="tplEditorName" placeholder="例如：金融分析" />
+      <label for="tplEditorCategory">分类 <span class="muted">(可选)</span></label>
+      <input id="tplEditorCategory" placeholder="例如：分析" />
+      <label for="tplEditorDesc">说明 <span class="muted">(可选)</span></label>
+      <input id="tplEditorDesc" placeholder="一句话描述这个任务类型" />
+      <div class="switch-row" style="margin-top:10px">
+        <div><strong>流水线模式</strong><div class="muted" style="font-size:11px">开发 → 测试 → 提交 → 部署</div></div>
+        <label class="switch"><input id="tplEditorPipeline" type="checkbox"><span class="slider"></span></label>
+      </div>
+      <div class="switch-row">
+        <div><strong>默认 Git 提交</strong><div class="muted" style="font-size:11px">流水线通过后自动提交（需项目启用 Git）</div></div>
+        <label class="switch"><input id="tplEditorGit" type="checkbox"><span class="slider"></span></label>
+      </div>
+      <div class="switch-row">
+        <div><strong>默认 Plan 模式</strong><div class="muted" style="font-size:11px">新建时默认开启规划</div></div>
+        <label class="switch"><input id="tplEditorComplex" type="checkbox"><span class="slider"></span></label>
+      </div>
+      <label style="margin-top:10px">变量</label>
+      <div id="tplEditorVariables" class="var-editor-list"></div>
+      <button type="button" id="tplEditorAddVarBtn" style="width:100%;margin-top:8px">添加变量</button>
+      <label for="tplEditorPrompt" style="margin-top:10px">提示词</label>
+      <textarea id="tplEditorPrompt" rows="8" placeholder="例如：\n工作目录：\n{{workdirs_detail}}\n\n分析目标：{{data}}\n\n要求：..."></textarea>
+      <div id="tplEditorError" class="error"></div>
+      <div class="modal-actions">
+        <button type="button" id="tplEditorCancelBtn">取消</button>
+        <button type="submit" id="tplEditorSaveBtn" class="primary">保存</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="scheduleModal" class="modal-backdrop hidden">
+    <div class="modal-panel modal-wide" role="dialog" aria-labelledby="scheduleModalTitle">
+      <h3 id="scheduleModalTitle">常驻任务</h3>
+      <p class="muted">常驻任务长期存在，可手动或按 cron 定时触发；每次触发生成一张普通任务卡在看板流动。时区固定 Asia/Shanghai。</p>
+      <div class="modal-section">
+        <div class="tasktype-private-head" style="margin-top:0">
+          <strong style="font-size:13px">已配置的常驻任务</strong>
+          <button type="button" id="addScheduleBtn">新增常驻任务</button>
+        </div>
+        <div id="scheduleList" class="tasktype-list"></div>
+      </div>
+      <div id="scheduleEditor" class="modal-section hidden">
+        <h4 id="scheduleEditorTitle">新增常驻任务</h4>
+        <label for="scheduleName">名称</label>
+        <input id="scheduleName" placeholder="例如：盘后分析" />
+        <label for="scheduleTemplate">任务类型</label>
+        <select id="scheduleTemplate"></select>
+        <div id="scheduleVariables" class="variable-fields"></div>
+        <div id="scheduleWorkdirGroup" class="hidden">
+          <label>工作目录 <span class="muted">(每次触发在这些目录执行)</span></label>
+          <div id="scheduleWorkdirChecks" class="workdir-check-list"></div>
+        </div>
+        <label for="scheduleTrigger">触发方式</label>
+        <select id="scheduleTrigger">
+          <option value="manual">仅手动触发</option>
+          <option value="cron">定时触发 (cron)</option>
+        </select>
+        <div id="scheduleCronWrap" class="hidden">
+          <label for="scheduleCron">cron 表达式 <span class="muted">(分 时 日 月 周)</span></label>
+          <input id="scheduleCron" placeholder="例如：30 15 * * 1-5（工作日 15:30）" />
+          <div id="scheduleCronPreview" class="muted" style="font-size:12px;margin-top:6px"></div>
+        </div>
+        <div class="switch-row">
+          <div><strong>启用</strong><div class="muted" style="font-size:11px">关闭后定时不再触发（手动触发仍可用）</div></div>
+          <label class="switch"><input id="scheduleEnabled" type="checkbox" checked><span class="slider"></span></label>
+        </div>
+        <div id="scheduleError" class="error"></div>
+        <div class="modal-actions">
+          <button type="button" id="scheduleEditorCancelBtn">返回列表</button>
+          <button type="button" id="scheduleSaveBtn" class="primary">保存</button>
+        </div>
+      </div>
+      <div class="modal-actions" id="scheduleModalFooter">
+        <button type="button" id="scheduleModalCloseBtn">关闭</button>
+      </div>
+    </div>
   </div>
 
   <div id="loginGate" class="login-gate">
@@ -924,7 +1070,8 @@
     const state = {
       token: localStorage.getItem('cursorBoardToken') || '',
       projectId: params.get('project'),
-      project: null, projects: [], tasks: [], templates: [], rules: [], selectedRuleIndex: 0,
+      project: null, projects: [], tasks: [], templates: [], allTemplates: [], tplEditorId: null,
+      schedules: [], scheduleEditorId: null, rules: [], selectedRuleIndex: 0,
       skills: [], selectedSkillIndex: 0,
       selectedId: null, logChunks: {}, taskEvents: {}, taskLogVisibleChars: {}, models: { options: [] }, fieldImages: {},
       doneExpanded: false, archivedTasks: [], archivedCount: 0, showArchived: false,
@@ -1106,12 +1253,31 @@
       $('gitCommitInput')?.addEventListener('change',()=>{$('gitCommitInput').dataset.touched='1';});
       $('templateSelect').onchange=()=>{syncTemplateSelection();renderTemplateFields();renderGitCommitOptions();updateTitlePreview();};
       $('projectGitEnabledEditor').onchange=syncProjectGitEditorVisibility;
+      $('addPrivateTemplateBtn').onclick=()=>openTemplateEditor(null);
+      $('templateEditorForm').onsubmit=saveTemplateEditor;
+      $('tplEditorCancelBtn').onclick=closeTemplateEditor;
+      $('tplEditorAddVarBtn').onclick=()=>renderTplVariables([...collectTplVariables(),{name:'',label:'',input:'textarea'}]);
+      $('templateEditorModal').onclick=(event)=>{
+        if(event.target===$('templateEditorModal'))closeTemplateEditor();
+      };
+      $('schedulesBtn').onclick=openScheduleModal;
+      $('scheduleModalCloseBtn').onclick=closeScheduleModal;
+      $('scheduleModal').onclick=(event)=>{
+        if(event.target===$('scheduleModal'))closeScheduleModal();
+      };
+      $('addScheduleBtn').onclick=()=>openScheduleEditor(null);
+      $('scheduleEditorCancelBtn').onclick=closeScheduleEditor;
+      $('scheduleSaveBtn').onclick=saveSchedule;
+      $('scheduleTemplate').onchange=()=>renderScheduleVariables();
+      $('scheduleTrigger').onchange=syncScheduleTriggerVisibility;
+      $('scheduleCron').addEventListener('input',updateCronPreview);
     }
 
     async function bootstrap(){
       const data=await api('/api/bootstrap');
       state.models=data.models||{options:[]};
-      state.templates=await api('/api/templates');
+      state.allTemplates=await api('/api/templates');
+      state.templates=state.allTemplates;
     }
 
     function showLogin(message=''){
@@ -1281,6 +1447,7 @@
     }
 
     function isPipelineTemplate(template){
+      if(template?.defaults&&typeof template.defaults.pipeline==='boolean')return template.defaults.pipeline;
       return Boolean(template?.pipeline||template?.category==='开发');
     }
 
@@ -1330,13 +1497,21 @@
           <div class="image-previews" data-image-list="${escapeHtml(item.name)}"></div>`:
           `<label>${escapeHtml(item.label||item.name)}${item.required?'':' <span class="muted">(可选)</span>'}</label>${inputHtml}`;
         return `<div class="field-block" data-field="${escapeHtml(item.name)}">${toolbar}</div>`;
-      }).join('');
+      }).join('')+privateRequirementFieldHtml(template);
       bindFieldImageEvents();
       Object.keys(state.fieldImages).forEach(renderImagePreviews);
       document.querySelectorAll('[id^="var_"]').forEach(field=>{
         field.addEventListener('input',updateTitlePreview);
       });
       updateTitlePreview();
+    }
+
+    function privateRequirementFieldHtml(template){
+      if(template?.scope!=='project')return '';
+      return `<div class="field-block" data-field="__requirement">
+        <label>需求 <span class="muted">(会追加到提示词末尾)</span></label>
+        <textarea id="var___requirement" rows="5" placeholder="告诉 Agent 这次要处理什么，例如：用 MySQL MCP 统计上周各仓库出库量"></textarea>
+      </div>`;
     }
 
     function bindFieldImageEvents(){
@@ -1513,6 +1688,11 @@
       (selectedTemplate()?.variables||[]).forEach(item=>{
         variables[item.name]=$(`var_${item.name}`)?.value?.trim()||'';
       });
+      const requirementEl=$('var___requirement');
+      if(requirementEl){
+        const value=requirementEl.value.trim();
+        if(value)variables.__requirement=value;
+      }
       return variables;
     }
 
@@ -1535,7 +1715,7 @@
         const value=String(variables[item.name]||'').trim();
         if(value)return value;
       }
-      return '';
+      return String(variables?.__requirement||'').trim();
     }
     function deriveTaskTitle(template,variables,explicitTitle){
       const trimmed=String(explicitTitle||'').trim();
@@ -1990,8 +2170,407 @@
       $('projectSimpleModelEditor').value=state.project.simple_model||'';
       $('projectComplexModelEditor').value=state.project.complex_model||'';
       $('projectDefaultTemplateEditor').value=state.project.default_template||defaultTemplateId();
+      renderTaskTypeSection();
       syncProjectGitEditorVisibility();
       $('projectConfigModal').classList.remove('hidden');
+    }
+
+    function renderTaskTypeSection(){
+      const globalList=$('globalTemplateList');
+      const privateList=$('privateTemplateList');
+      if(!globalList||!privateList)return;
+      const enabled=state.project?.enabled_templates;
+      const isEnabled=(id)=>id==='general'||enabled==null||enabled.includes(id);
+      const globals=(state.allTemplates||[]).filter(item=>item.scope!=='project');
+      globalList.innerHTML=globals.map(item=>{
+        const locked=item.id==='general';
+        return `<div class="tasktype-row">
+          <div class="tt-main">
+            <div class="tt-name">${escapeHtml(item.name)}${locked?' <span class="muted">(必选)</span>':''}</div>
+            <div class="tt-meta">${escapeHtml(item.category||'其他')}${item.defaults?.pipeline?' · 流水线':''}</div>
+          </div>
+          <label class="switch"><input type="checkbox" data-global-template="${escapeHtml(item.id)}" ${isEnabled(item.id)?'checked':''} ${locked?'disabled':''}><span class="slider"></span></label>
+        </div>`;
+      }).join('');
+      const privates=(state.templates||[]).filter(item=>item.scope==='project');
+      privateList.innerHTML=privates.length?privates.map(item=>`
+        <div class="tasktype-row">
+          <div class="tt-main">
+            <div class="tt-name">${escapeHtml(item.name)}</div>
+            <div class="tt-meta">${escapeHtml(item.category||'项目')}${item.defaults?.pipeline?' · 流水线':''}${item.defaults?.git?' · Git':''}</div>
+          </div>
+          <div class="tt-actions">
+            <button type="button" data-edit-template="${escapeHtml(item.id)}">编辑</button>
+            <button type="button" data-delete-template="${escapeHtml(item.id)}">删除</button>
+          </div>
+        </div>`).join(''):'<div class="muted" style="font-size:12px">暂无私有类型</div>';
+      privateList.querySelectorAll('[data-edit-template]').forEach(btn=>{
+        btn.onclick=()=>openTemplateEditor(btn.dataset.editTemplate);
+      });
+      privateList.querySelectorAll('[data-delete-template]').forEach(btn=>{
+        btn.onclick=()=>deletePrivateTemplate(btn.dataset.deleteTemplate);
+      });
+    }
+
+    function collectEnabledGlobals(){
+      const ids=Array.from(document.querySelectorAll('[data-global-template]'))
+        .filter(input=>input.checked)
+        .map(input=>input.dataset.globalTemplate);
+      if(!ids.includes('general'))ids.push('general');
+      return ids;
+    }
+
+    async function refreshTaskTypes(){
+      if(!state.projectId)return;
+      state.templates=await api(`/api/projects/${state.projectId}/task-types`);
+      renderProjectDefaultOptions();
+      $('projectDefaultTemplateEditor').value=state.project?.default_template||defaultTemplateId();
+      renderTemplateOptions();
+      renderTemplateFields();
+      renderModelOptions();
+      renderGitCommitOptions();
+    }
+
+    function openTemplateEditor(id){
+      state.tplEditorId=id||null;
+      const tpl=id?(state.templates||[]).find(item=>item.id===id&&item.scope==='project'):null;
+      $('tplEditorError').textContent='';
+      $('templateEditorTitle').textContent=id?'编辑私有任务类型':'新增私有任务类型';
+      $('tplEditorName').value=tpl?.name||'';
+      $('tplEditorCategory').value=tpl&&tpl.category!=='项目'?(tpl.category||''):'';
+      $('tplEditorDesc').value=tpl?.description||'';
+      $('tplEditorPipeline').checked=Boolean(tpl?.defaults?.pipeline);
+      $('tplEditorGit').checked=Boolean(tpl?.defaults?.git);
+      $('tplEditorComplex').checked=Boolean(tpl?.defaults?.complex);
+      $('tplEditorPrompt').value=tpl?.prompt||'';
+      renderTplVariables(tpl?.variables||[]);
+      $('templateEditorModal').classList.remove('hidden');
+      $('tplEditorName').focus();
+    }
+
+    function closeTemplateEditor(){
+      $('templateEditorModal').classList.add('hidden');
+      state.tplEditorId=null;
+    }
+
+    function tplVariableRowHtml(v,index){
+      return `<div class="var-editor-row" data-var-index="${index}">
+        <input data-vf="name" placeholder="变量名(英文)" value="${escapeHtml(v.name||'')}" />
+        <input data-vf="label" placeholder="显示名" value="${escapeHtml(v.label||'')}" />
+        <select data-vf="input">
+          <option value="textarea" ${v.input!=='input'?'selected':''}>多行</option>
+          <option value="input" ${v.input==='input'?'selected':''}>单行</option>
+        </select>
+        <button type="button" data-remove-var="${index}">删除</button>
+        <div class="var-flags">
+          <label><input type="checkbox" data-vf="required" ${v.required?'checked':''}> 必填</label>
+          <label><input type="checkbox" data-vf="images" ${v.images?'checked':''}> 允许图片</label>
+        </div>
+      </div>`;
+    }
+
+    function renderTplVariables(vars){
+      const container=$('tplEditorVariables');
+      if(!container)return;
+      const rows=Array.isArray(vars)?vars:[];
+      container.innerHTML=rows.map((v,index)=>tplVariableRowHtml(v,index)).join('');
+      container.querySelectorAll('[data-remove-var]').forEach(btn=>{
+        btn.onclick=()=>{
+          const next=collectTplVariables();
+          next.splice(Number(btn.dataset.removeVar),1);
+          renderTplVariables(next);
+        };
+      });
+    }
+
+    function collectTplVariables(){
+      return Array.from($('tplEditorVariables').querySelectorAll('.var-editor-row')).map(row=>({
+        name:row.querySelector('[data-vf="name"]')?.value.trim()||'',
+        label:row.querySelector('[data-vf="label"]')?.value.trim()||'',
+        input:row.querySelector('[data-vf="input"]')?.value==='input'?'input':'textarea',
+        required:row.querySelector('[data-vf="required"]')?.checked||false,
+        images:row.querySelector('[data-vf="images"]')?.checked||false,
+      })).filter(v=>v.name);
+    }
+
+    async function saveTemplateEditor(event){
+      event?.preventDefault();
+      $('tplEditorError').textContent='';
+      const body={
+        name:$('tplEditorName').value.trim(),
+        category:$('tplEditorCategory').value.trim(),
+        description:$('tplEditorDesc').value.trim(),
+        prompt:$('tplEditorPrompt').value,
+        variables:collectTplVariables(),
+        defaults:{
+          pipeline:$('tplEditorPipeline').checked,
+          git:$('tplEditorGit').checked,
+          complex:$('tplEditorComplex').checked,
+        },
+      };
+      if(!body.name){$('tplEditorError').textContent='请填写名称';return;}
+      if(!body.prompt.trim()){$('tplEditorError').textContent='请填写提示词';return;}
+      const btn=$('tplEditorSaveBtn');
+      btn.disabled=true;
+      try{
+        const path=state.tplEditorId
+          ?`/api/projects/${state.projectId}/templates/${state.tplEditorId}`
+          :`/api/projects/${state.projectId}/templates`;
+        const res=await api(path,{method:state.tplEditorId?'PATCH':'POST',body:JSON.stringify(body)});
+        if(res?.warnings?.length)alert('已保存，但请注意：\n'+res.warnings.join('\n'));
+        closeTemplateEditor();
+        await refreshTaskTypes();
+        renderTaskTypeSection();
+      }catch(error){$('tplEditorError').textContent=error.message}
+      finally{btn.disabled=false}
+    }
+
+    async function deletePrivateTemplate(id){
+      const tpl=(state.templates||[]).find(item=>item.id===id);
+      if(!confirm(`确定删除私有任务类型「${tpl?.name||id}」？`))return;
+      try{
+        await api(`/api/projects/${state.projectId}/templates/${id}`,{method:'DELETE'});
+        await refreshTaskTypes();
+        renderTaskTypeSection();
+      }catch(error){$('projectConfigError').textContent=error.message}
+    }
+
+    function formatScheduleTime(value){
+      if(!value)return '—';
+      const date=new Date(value);
+      if(Number.isNaN(date.getTime()))return '—';
+      return date.toLocaleString('zh-CN',{hour12:false});
+    }
+
+    async function openScheduleModal(){
+      if(!state.projectId||state.project?.type==='machine')return;
+      $('scheduleModal').classList.remove('hidden');
+      closeScheduleEditor();
+      await reloadSchedules();
+    }
+
+    function closeScheduleModal(){
+      $('scheduleModal').classList.add('hidden');
+      closeScheduleEditor();
+    }
+
+    async function reloadSchedules(){
+      if(!state.projectId)return;
+      try{
+        state.schedules=await api(`/api/projects/${state.projectId}/schedules`);
+      }catch(error){state.schedules=[]}
+      renderScheduleList();
+    }
+
+    function renderScheduleList(){
+      const list=$('scheduleList');
+      if(!list)return;
+      if(!state.schedules.length){
+        list.innerHTML='<div class="muted" style="font-size:12px">暂无常驻任务</div>';
+        return;
+      }
+      list.innerHTML=state.schedules.map(item=>{
+        const trigger=item.trigger==='cron'
+          ? `定时 · <code>${escapeHtml(item.cron_expr||'')}</code>`
+          : '手动';
+        const lastLink=item.last_task_id
+          ? `<a href="#" data-schedule-last="${escapeHtml(item.last_task_id)}">上次结果↗</a>`
+          : '<span class="muted">无</span>';
+        return `<div class="tasktype-row">
+          <div class="tt-main">
+            <div class="tt-name">${escapeHtml(item.name)}${item.enabled?'':' <span class="muted">(已停用)</span>'}</div>
+            <div class="tt-meta">${escapeHtml(templateName(item.template_id))} · ${trigger}${item.trigger==='cron'?` · 下次 ${escapeHtml(formatScheduleTime(item.next_run_at))}`:''} · ${lastLink}</div>
+          </div>
+          <div class="tt-actions">
+            <button type="button" data-schedule-trigger="${escapeHtml(item.id)}">立即触发</button>
+            <button type="button" data-schedule-edit="${escapeHtml(item.id)}">编辑</button>
+            <button type="button" data-schedule-delete="${escapeHtml(item.id)}">删除</button>
+          </div>
+        </div>`;
+      }).join('');
+      list.querySelectorAll('[data-schedule-trigger]').forEach(btn=>{
+        btn.onclick=()=>triggerSchedule(btn.dataset.scheduleTrigger);
+      });
+      list.querySelectorAll('[data-schedule-edit]').forEach(btn=>{
+        btn.onclick=()=>openScheduleEditor(btn.dataset.scheduleEdit);
+      });
+      list.querySelectorAll('[data-schedule-delete]').forEach(btn=>{
+        btn.onclick=()=>deleteSchedule(btn.dataset.scheduleDelete);
+      });
+      list.querySelectorAll('[data-schedule-last]').forEach(link=>{
+        link.onclick=(event)=>{
+          event.preventDefault();
+          closeScheduleModal();
+          selectTask(link.dataset.scheduleLast);
+        };
+      });
+    }
+
+    function renderScheduleTemplateOptions(){
+      $('scheduleTemplate').innerHTML=(state.templates||[]).map(item=>
+        `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}${item.scope==='project'?' · 私有':''}</option>`,
+      ).join('');
+    }
+
+    function renderScheduleVariables(values={}){
+      const template=(state.templates||[]).find(item=>item.id===$('scheduleTemplate').value);
+      const container=$('scheduleVariables');
+      let html=(template?.variables||[]).map(item=>{
+        const rows=Number(item.rows)||4;
+        const val=escapeHtml(values[item.name]||'');
+        const label=`<label>${escapeHtml(item.label||item.name)}${item.required?'':' <span class="muted">(可选)</span>'}</label>`;
+        const field=item.input==='input'
+          ?`<input id="sched_var_${escapeHtml(item.name)}" placeholder="${escapeHtml(item.placeholder||'')}" value="${val}" />`
+          :`<textarea id="sched_var_${escapeHtml(item.name)}" rows="${rows}" placeholder="${escapeHtml(item.placeholder||'')}">${val}</textarea>`;
+        return `<div class="field-block">${label}${field}</div>`;
+      }).join('');
+      if(template?.scope==='project'){
+        html+=`<div class="field-block">
+          <label>需求 <span class="muted">(会追加到提示词末尾)</span></label>
+          <textarea id="sched_var___requirement" rows="4" placeholder="每次触发要处理的内容">${escapeHtml(values.__requirement||'')}</textarea>
+        </div>`;
+      }
+      container.innerHTML=html;
+    }
+
+    function collectScheduleVariables(){
+      const template=(state.templates||[]).find(item=>item.id===$('scheduleTemplate').value);
+      const result={};
+      (template?.variables||[]).forEach(item=>{
+        const field=$(`sched_var_${item.name}`);
+        if(field)result[item.name]=field.value;
+      });
+      const requirementEl=$('sched_var___requirement');
+      if(requirementEl){
+        const value=requirementEl.value.trim();
+        if(value)result.__requirement=value;
+      }
+      return result;
+    }
+
+    function syncScheduleTriggerVisibility(){
+      const isCron=$('scheduleTrigger').value==='cron';
+      $('scheduleCronWrap').classList.toggle('hidden',!isCron);
+      if(isCron)updateCronPreview();
+    }
+
+    let cronPreviewTimer=null;
+    function updateCronPreview(){
+      const expr=$('scheduleCron').value.trim();
+      const preview=$('scheduleCronPreview');
+      if(!expr){preview.textContent='';return;}
+      if(cronPreviewTimer)clearTimeout(cronPreviewTimer);
+      cronPreviewTimer=setTimeout(async()=>{
+        try{
+          const res=await api('/api/schedules/preview',{method:'POST',body:JSON.stringify({cron:expr})});
+          preview.textContent=`下次运行：${formatScheduleTime(res.nextRun)}（Asia/Shanghai）`;
+          preview.classList.remove('error');
+        }catch(error){
+          preview.textContent=`表达式无效：${error.message}`;
+        }
+      },300);
+    }
+
+    function renderScheduleWorkdirOptions(selected){
+      const workdirs=state.project?.workdirs||[];
+      const machine=state.project?.type==='machine';
+      const show=!machine&&workdirs.length>1;
+      $('scheduleWorkdirGroup').classList.toggle('hidden',!show);
+      if(!show){$('scheduleWorkdirChecks').innerHTML='';return;}
+      const selectedPaths=(selected||[])
+        .map(item=>typeof item==='string'?item:item?.path)
+        .map(value=>String(value||'').replace(/\//g,'\\').toLowerCase())
+        .filter(Boolean);
+      const checkAll=!selectedPaths.length;
+      $('scheduleWorkdirChecks').innerHTML=workdirs.map(entry=>{
+        const key=entry.path.replace(/\//g,'\\').toLowerCase();
+        const checked=checkAll||selectedPaths.includes(key);
+        return `<label class="workdir-check">
+          <input type="checkbox" value="${escapeHtml(entry.path)}" ${checked?'checked':''} />
+          <span>
+            <div>${escapeHtml(entry.label||entry.path)}</div>
+            ${entry.label?`<div class="path">${escapeHtml(entry.path)}</div>`:''}
+          </span>
+        </label>`;
+      }).join('');
+    }
+
+    function collectScheduleWorkdirs(){
+      const container=$('scheduleWorkdirChecks');
+      if(!container)return [];
+      return Array.from(container.querySelectorAll('input[type="checkbox"]:checked')).map(input=>input.value);
+    }
+
+    function openScheduleEditor(id){
+      state.scheduleEditorId=id||null;
+      const schedule=id?state.schedules.find(item=>item.id===id):null;
+      $('scheduleError').textContent='';
+      $('scheduleEditorTitle').textContent=id?'编辑常驻任务':'新增常驻任务';
+      renderScheduleTemplateOptions();
+      $('scheduleName').value=schedule?.name||'';
+      $('scheduleTemplate').value=schedule?.template_id||(state.templates[0]?.id||'');
+      renderScheduleVariables(schedule?.variables||{});
+      renderScheduleWorkdirOptions(schedule?.workdirs);
+      $('scheduleTrigger').value=schedule?.trigger==='cron'?'cron':'manual';
+      $('scheduleCron').value=schedule?.cron_expr||'';
+      $('scheduleEnabled').checked=schedule?schedule.enabled:true;
+      syncScheduleTriggerVisibility();
+      $('scheduleEditor').classList.remove('hidden');
+      $('scheduleModalFooter').classList.add('hidden');
+    }
+
+    function closeScheduleEditor(){
+      state.scheduleEditorId=null;
+      $('scheduleEditor').classList.add('hidden');
+      $('scheduleModalFooter').classList.remove('hidden');
+      $('scheduleError').textContent='';
+    }
+
+    async function saveSchedule(){
+      $('scheduleError').textContent='';
+      const trigger=$('scheduleTrigger').value==='cron'?'cron':'manual';
+      const workdirs=collectScheduleWorkdirs();
+      const body={
+        name:$('scheduleName').value.trim(),
+        template_id:$('scheduleTemplate').value,
+        variables:collectScheduleVariables(),
+        workdirs,
+        trigger,
+        cron_expr:trigger==='cron'?$('scheduleCron').value.trim():null,
+        enabled:$('scheduleEnabled').checked,
+      };
+      if(!body.name){$('scheduleError').textContent='请填写名称';return;}
+      const multiWorkdir=!$('scheduleWorkdirGroup').classList.contains('hidden');
+      if(multiWorkdir&&!workdirs.length){$('scheduleError').textContent='请至少选择一个工作目录';return;}
+      if(trigger==='cron'&&!body.cron_expr){$('scheduleError').textContent='定时触发需填写 cron 表达式';return;}
+      const btn=$('scheduleSaveBtn');
+      btn.disabled=true;
+      try{
+        const path=state.scheduleEditorId
+          ?`/api/schedules/${state.scheduleEditorId}`
+          :`/api/projects/${state.projectId}/schedules`;
+        await api(path,{method:state.scheduleEditorId?'PATCH':'POST',body:JSON.stringify(body)});
+        closeScheduleEditor();
+        await reloadSchedules();
+      }catch(error){$('scheduleError').textContent=error.message}
+      finally{btn.disabled=false}
+    }
+
+    async function triggerSchedule(id){
+      try{
+        await api(`/api/schedules/${id}/trigger`,{method:'POST'});
+        await reloadSchedules();
+        await refreshTasks();
+      }catch(error){alert(`触发失败：${error.message}`)}
+    }
+
+    async function deleteSchedule(id){
+      const schedule=state.schedules.find(item=>item.id===id);
+      if(!confirm(`确定删除常驻任务「${schedule?.name||id}」？`))return;
+      try{
+        await api(`/api/schedules/${id}`,{method:'DELETE'});
+        await reloadSchedules();
+      }catch(error){alert(`删除失败：${error.message}`)}
     }
 
     function closeProjectConfigModal(){
@@ -2024,6 +2603,10 @@
             gitPush:$('projectGitPushEditor').checked,
           })
         });
+        state.project=await api(`/api/projects/${state.projectId}/enabled-templates`,{
+          method:'PATCH',
+          body:JSON.stringify({ids:collectEnabledGlobals()}),
+        });
         state.project=await api(`/api/projects/${state.projectId}/defaults`,{
           method:'PATCH',
           body:JSON.stringify({
@@ -2032,6 +2615,7 @@
             defaultTemplate:$('projectDefaultTemplateEditor').value||null,
           }),
         });
+        state.templates=await api(`/api/projects/${state.projectId}/task-types`);
         state.rules=await api(`/api/projects/${state.projectId}/rules`);
         state.skills=await api(`/api/projects/${state.projectId}/skills`);
         $('projectPath').textContent=formatProjectWorkdirs(state.project);
@@ -2194,6 +2778,7 @@
 
     async function loadProject(){
       state.project=await api(`/api/projects/${state.projectId}`);
+      state.templates=await api(`/api/projects/${state.projectId}/task-types`);
       state.tasks=await api(`/api/tasks?projectId=${encodeURIComponent(state.projectId)}`);
       state.selectedId=null;
       state.archivedTasks=[];
@@ -2221,6 +2806,7 @@
       const machine=state.project.type==='machine';
       $('projectActionsBar').classList.toggle('hidden',machine);
       $('projectConfigBtn').classList.toggle('hidden',machine);
+      $('schedulesBtn').classList.toggle('hidden',machine);
       $('rulesBtn').classList.toggle('hidden',machine);
       $('skillsBtn').classList.toggle('hidden',machine);
       if(machine)return;
@@ -3044,6 +3630,13 @@
           handleChatSse(name,JSON.parse(event.data));
         });
       });
+      ['schedule:created','schedule:updated','schedule:deleted','schedule:run'].forEach(name=>source.addEventListener(name,event=>{
+        const payload=JSON.parse(event.data);
+        if(!$('scheduleModal').classList.contains('hidden')
+          &&state.projectId&&payload.project_id===state.projectId){
+          reloadSchedules();
+        }
+      }));
     }
 
     async function updateQueue(){

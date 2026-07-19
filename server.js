@@ -1,6 +1,15 @@
-const { openDb, createProjectRepo, createTaskRepo, createChatRepo } = require('./db');
+const {
+  openDb,
+  createProjectRepo,
+  createTaskRepo,
+  createChatRepo,
+  createProjectTemplateRepo,
+  createScheduleRepo,
+} = require('./db');
 const TaskQueue = require('./queue');
 const ChatService = require('./chat-service');
+const { createTemplateService } = require('./template-service');
+const ScheduleScheduler = require('./schedule-scheduler');
 const { writePidFile, clearPidFile } = require('./deploy-restart');
 const ProjectDeployer = require('./project-deployer');
 const {
@@ -30,6 +39,9 @@ function main() {
   const repo = createTaskRepo(db);
   const chatRepo = createChatRepo(db);
   const projects = createProjectRepo(db);
+  const projectTemplates = createProjectTemplateRepo(db);
+  const scheduleRepo = createScheduleRepo(db);
+  const templateService = createTemplateService({ projectTemplates });
   const machineProject = projects.ensureMachineProject();
   repo.assignUnscopedTasks(machineProject.id);
   projects.ensureDeployCommandForWorkdir(ROOT, 'npm run deploy');
@@ -40,6 +52,14 @@ function main() {
     repo,
     projects,
     config,
+    broadcast: (event, data) => broadcaster.send(event, data),
+    templateService,
+    projectTemplates,
+  });
+  const scheduleScheduler = new ScheduleScheduler({
+    scheduleRepo,
+    projects,
+    queue,
     broadcast: (event, data) => broadcaster.send(event, data),
   });
   const projectDeployer = new ProjectDeployer({
@@ -66,6 +86,10 @@ function main() {
     projectDeployer,
     chatService,
     broadcaster,
+    projectTemplates,
+    scheduleRepo,
+    templateService,
+    scheduleScheduler,
     root: ROOT,
   });
 
@@ -95,6 +119,8 @@ function main() {
     console.log(`  恢复中断任务: ${recovered}`);
     console.log(`  恢复中断对话: ${recoveredChats}`);
     console.log(`  回收残留进程: ${reclaimed.killed}/${reclaimed.total}`);
+    const scheduleCount = scheduleScheduler.start();
+    console.log(`  已注册定时任务: ${scheduleCount}`);
     console.log('========================================');
     console.log('');
     queue.kick();

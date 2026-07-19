@@ -36,7 +36,7 @@ function loadTemplates() {
     .filter((name) => name.endsWith('.json'))
     .map((name) => {
       const raw = fs.readFileSync(path.join(TEMPLATE_DIR, name), 'utf8');
-      return JSON.parse(raw);
+      return decorateTemplate(JSON.parse(raw), 'global');
     });
   return sortTemplates(templates);
 }
@@ -89,6 +89,27 @@ function isPipelineTemplate(template) {
   return Boolean(template?.pipeline || template?.category === '开发');
 }
 
+function normalizeTemplateDefaults(template) {
+  const defaults = template && typeof template.defaults === 'object' && template.defaults
+    ? template.defaults
+    : {};
+  const pipeline = typeof defaults.pipeline === 'boolean'
+    ? defaults.pipeline
+    : isPipelineTemplate(template);
+  const git = typeof defaults.git === 'boolean' ? defaults.git : true;
+  const complex = typeof defaults.complex === 'boolean' ? defaults.complex : false;
+  return { pipeline, git, complex };
+}
+
+function decorateTemplate(template, scope = 'global') {
+  if (!template || typeof template !== 'object') return template;
+  return {
+    ...template,
+    scope: template.scope || scope,
+    defaults: normalizeTemplateDefaults(template),
+  };
+}
+
 const TITLE_MAX_LEN = 48;
 const PROVISIONAL_TITLE_MAX_LEN = 28;
 
@@ -122,7 +143,7 @@ function pickPrimaryVariable(template, variables) {
     const value = String(variables[item.name] || '').trim();
     if (value) return value;
   }
-  return '';
+  return String(variables?.__requirement || '').trim();
 }
 
 function deriveTaskTitle(template, variables, explicitTitle) {
@@ -152,6 +173,8 @@ module.exports = {
   sortTemplates,
   validateVariables,
   isPipelineTemplate,
+  normalizeTemplateDefaults,
+  decorateTemplate,
   deriveTaskTitle,
   formatWorkdirsDetail,
   buildWorkdirTemplateContext,

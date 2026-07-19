@@ -4,6 +4,7 @@
   "category": "通用",
   "order": 2,
   "description": "处理本地文件、文档整理、批量改写或格式转换",
+  "defaults": { "pipeline": false, "git": false, "complex": false },
   "variables": [
     {
       "name": "description",

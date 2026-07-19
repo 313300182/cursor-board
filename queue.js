@@ -5,13 +5,12 @@ const { taskWorkdirPaths } = ProjectScheduler;
 const WorkdirLock = require('./workdir-lock');
 const { normalizeWorkdirs } = require('./db');
 const {
-  getTemplate,
   renderTemplate,
   validateVariables,
-  isPipelineTemplate,
   deriveTaskTitle,
   buildWorkdirTemplateContext,
 } = require('./templates');
+const { createTemplateService } = require('./template-service');
 const { resolveTaskModel } = require('./model-config');
 const { statusForPhase } = require('./pipeline');
 const {
@@ -43,11 +42,13 @@ function isIterableStatus(status) {
  * @author Amadeus
  */
 class TaskQueue {
-  constructor({ repo, projects, config, broadcast }) {
+  constructor({ repo, projects, config, broadcast, templateService, projectTemplates }) {
     this.repo = repo;
     this.projects = projects;
     this.config = config;
     this.broadcast = broadcast;
+    this.templateService = templateService
+      || createTemplateService({ projectTemplates });
     this.runner = new AcpRunner(config);
     this.workdirLock = new WorkdirLock();
     this.scheduler = new ProjectScheduler({
@@ -145,7 +146,7 @@ class TaskQueue {
     this.validateTaskWorkdirs(workdirs);
     const workdir = workdirs[0].path;
     const templateId = input.template || project.default_template || 'general';
-    const template = getTemplate(templateId);
+    const template = this.templateService.resolveTemplate(project.id, templateId);
     if (!template) {
       throw new Error(`模板不存在: ${templateId}`);
     }
@@ -162,15 +163,20 @@ class TaskQueue {
       throw new Error('Plan 模式请填写标题，或补充任务描述');
     }
 
-    const promptRendered = renderTemplate(template, {
+    let promptRendered = renderTemplate(template, {
       ...buildWorkdirTemplateContext(workdirs),
       ...variables,
     });
+    const requirementText = String(variables.__requirement || '').trim();
+    if (requirementText && !String(template.prompt || '').includes('{{__requirement}}')) {
+      promptRendered = `${promptRendered}\n\n补充需求：\n${requirementText}`;
+    }
     const attachments = normalizeAttachments(input.attachments, { includeField: true });
+    const templateDefaults = template.defaults || {};
     const pipelineMode = Boolean(
-      input.pipelineMode ?? isPipelineTemplate(template),
+      input.pipelineMode ?? templateDefaults.pipeline,
     );
-    const gitCommitRequested = input.gitCommit !== false && (input.gitCommit ?? true);
+    const gitCommitRequested = input.gitCommit ?? (templateDefaults.git !== false);
     const gitCommit = Boolean(
       pipelineMode && project.git_enabled && gitCommitRequested,
     );
@@ -199,6 +205,7 @@ class TaskQueue {
       model_id: modelId,
       prompt_rendered: promptRendered,
       parent_task_id: input.parentTaskId || null,
+      source_schedule_id: input.sourceScheduleId || null,
       created_at: now,
     });
 
@@ -219,7 +226,7 @@ class TaskQueue {
     const requirement = String(input.requirement || '').trim();
     if (!requirement && !attachments.length) throw new Error('请填写优化需求');
 
-    const iterationTemplate = getTemplate('iteration');
+    const iterationTemplate = this.templateService.resolveTemplate(source.project_id, 'iteration');
     if (!iterationTemplate) throw new Error('迭代模板不存在');
 
     const project = this.projects.getProject(source.project_id);

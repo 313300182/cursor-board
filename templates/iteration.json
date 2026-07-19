@@ -5,6 +5,7 @@
   "order": 2,
   "pipeline": true,
   "description": "在现有功能基础上优化迭代 → 测试 → 自动部署，全程同一对话，测试失败自动打回开发",
+  "defaults": { "pipeline": true, "git": true, "complex": false },
   "variables": [
     {
       "name": "requirement",

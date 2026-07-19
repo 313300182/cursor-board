@@ -4,6 +4,7 @@
   "category": "质量",
   "order": 1,
   "description": "审查指定代码的质量、安全性、可维护性与潜在风险",
+  "defaults": { "pipeline": false, "git": false, "complex": false },
   "variables": [
     {
       "name": "scope",

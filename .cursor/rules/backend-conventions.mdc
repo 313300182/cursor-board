@@ -44,9 +44,24 @@ function errorHandler(err, req, res, _next) {
 - 路由用 `asyncHandler` 包装,校验失败 `throw new HttpError(400, '...')`,不再逐个 `try/catch → res.status(400)`。
 - 校验放在路由/service 边界;内部相信数据。
 
+## 任务类型（模板）两种作用域
+
+- **模板 = 任务类型**,`category` 仅用于分组;每条模板带规范化 `defaults{ pipeline, git, complex }`(`templates.js` 的 `normalizeTemplateDefaults`)。旧模板无 `defaults` 时按 `isPipelineTemplate`(`pipeline` 或 `category==='开发'`)回退,`git` 默认 `true`、`complex` 默认 `false`,行为不变。
+- **全局模板**:`templates/*.json`,UI 只可启用/禁用(`scope:'global'`)。
+- **项目私有模板**:存 `project_templates` 表(`scope:'project'`),项目内可增删改。
+- 项目有效任务类型 = 全局启用子集 ∪ 项目私有 ∪ **强制并入 `general`(不可删/不可禁用)**;由 `template-service.js` 的 `listEffectiveTemplates(project)` 计算,`resolveTemplate(projectId, id)` 先全局后私有。
+- `projects.enabled_templates` 为 `NULL` 视为「全部全局启用」;`queue.createTask` 用 `resolveTemplate` 取模板,`pipelineMode = input ?? defaults.pipeline`、`gitCommit = pipelineMode && project.git_enabled && (input ?? defaults.git)`。
+
+## 常驻任务（schedules）
+
+- 常驻任务**长期存在、不走看板**;引用任务类型 + 参数快照 + 触发方式(`manual`/`cron`),存 `schedules` 表。
+- 每次触发(手动或 cron)生成一张**普通一次性任务卡**(`tasks.source_schedule_id` 溯源),跑完留在已完成列、手动归档,与普通任务完全一致。
+- cron 用 `croner`,固定 `Asia/Shanghai`,**不补跑**错过的点,重叠照常入队(靠 `WorkdirLock`+内存闸门兜底);`schedule-scheduler.js` 负责 `start/register/reconcileById/triggerNow/computeNextRun`,写操作后由路由调用 `reconcileById` 重建 Cron 并刷新 `next_run_at`。
+- `[立即触发]` 对所有常驻任务可用;不做历史运行列表,仅 `last_task_id` 提供「上次结果」链接。
+
 ## 硬约束
 
-- ❌ 不改动 `db.js`、`queue`、`pipeline`、`acp-runner`、`project-deployer`、`templates`、`model-config`、`agent-errors`、`interactions`、`scheduler`、`project-rules`、`deploy-restart` 的**导出签名**——`test/**` 直接依赖它们。
+- ❌ 不改动 `db.js`、`queue`、`pipeline`、`acp-runner`、`project-deployer`、`templates`、`template-service`、`schedule-scheduler`、`model-config`、`agent-errors`、`interactions`、`scheduler`、`project-rules`、`deploy-restart` 的**导出签名**——`test/**` 直接依赖它们。
 - ✅ 重构必须**行为等价、小步进行,每步 `npm test` 全绿**;路由无测试时,先补 `createApp()` 集成测试锁住行为,再搬运。
 - ✅ 仅用标准库/现有依赖(`express`/`better-sqlite3`/`uuid`),不新增依赖做集成测试(用 Node 内置 `http`)。
 - ✅ SSE 广播继续走 `broadcaster`;鉴权继续在 `/api/*` 边界(放行 `/api/health`、`/api/bootstrap`)。

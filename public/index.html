@@ -416,33 +416,46 @@
     }
     .switch input:checked+.slider{background:var(--accent)}
     .switch input:checked+.slider:before{transform:translateX(20px)}
-    .template-section{border:1px solid var(--border);border-radius:var(--radius-lg);margin:11px 0 6px;background:var(--surface-2);overflow:hidden}
-    .template-section summary{cursor:pointer;font-weight:600;padding:9px 11px;font-size:13px;color:var(--text);list-style:none;display:flex;align-items:center;justify-content:space-between;gap:8px}
+    .template-section{border:1px solid var(--border-strong);border-radius:10px;margin:16px 0 18px;background:var(--surface-2);overflow:hidden}
+    .template-section summary{cursor:pointer;font-weight:600;padding:12px 14px;font-size:13px;color:var(--text);list-style:none;display:flex;align-items:center;justify-content:space-between;gap:8px}
     .template-section summary::-webkit-details-marker{display:none}
     .template-section summary::after{content:"▸";color:var(--text-2);font-size:11px;flex-shrink:0}
     .template-section[open] summary{border-bottom:1px solid var(--border)}
     .template-section[open] summary::after{content:"▾"}
-    .template-section summary .muted{font-weight:400}
-    .template-picker-body{padding:8px 10px 10px}
-    .template-category{font-size:12px;color:var(--text-2);margin:8px 0 4px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+    .template-section summary .muted{font-weight:400;color:var(--accent-hover);background:var(--accent-subtle);border-radius:99px;padding:2px 8px}
+    .template-picker-body{padding:12px 14px 14px}
+    .template-category{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-2);margin:8px 0 7px;font-weight:600;text-transform:uppercase;letter-spacing:.06em}
     .template-category:first-child{margin-top:0}
-    .template-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:2px}
+    .template-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px;margin-bottom:12px}
     .template-card{
-      padding:6px 9px;
+      position:relative;
+      min-height:72px;
+      padding:11px 12px;
       border:1px solid var(--border);
-      border-radius:var(--radius);
+      border-radius:8px;
       cursor:pointer;
       font-size:12px;
       background:var(--surface);
       text-align:left;
       width:100%;
-      transition:border-color var(--transition),background-color var(--transition);
+      display:flex;
+      flex-direction:column;
+      align-items:flex-start;
+      gap:5px;
+      transition:border-color var(--transition),background-color var(--transition),box-shadow var(--transition);
     }
     .template-card:hover{background:var(--surface-hover);border-color:var(--border-strong)}
-    .template-card.active{border-color:var(--accent);background:var(--accent-subtle)}
-    .template-card .name{font-weight:600;font-size:12px;line-height:1.3}
-    .variable-fields{margin-top:4px}
-    .field-block{margin-bottom:4px}
+    .template-card.active{border-color:var(--accent);background:var(--accent-subtle);box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 22%,transparent)}
+    .template-card.active::after{content:"✓";position:absolute;top:9px;right:11px;color:var(--accent-hover);font-weight:700}
+    .template-card .name{font-weight:600;font-size:13px;line-height:1.3;padding-right:18px}
+    .template-card .description{display:-webkit-box;overflow:hidden;color:var(--text-2);font-size:11px;line-height:1.45;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+    .template-card .meta{display:flex;flex-wrap:wrap;gap:4px;margin-top:auto}
+    .template-card .meta span{padding:2px 5px;border-radius:4px;background:var(--surface-hover);color:var(--text-3);font-size:10px;line-height:1.2}
+    .template-card.active .meta span{background:rgba(75,139,245,.16);color:var(--accent-hover)}
+    .variable-fields{margin-top:8px}
+    .variable-fields textarea{min-height:132px}
+    .variable-fields textarea.textarea-large{min-height:220px}
+    .field-block{margin-bottom:10px}
     .field-toolbar{display:flex;align-items:center;justify-content:space-between;margin:11px 0 6px}
     .field-toolbar label{margin:0}
     .field-toolbar .toolbar{margin:0;gap:6px}
@@ -1517,6 +1530,11 @@
           ${state.templates.filter(item=>(item.category||'其他')===category).map(item=>`
             <button type="button" class="template-card" data-template="${escapeHtml(item.id)}">
               <div class="name">${escapeHtml(item.name)}</div>
+              <div class="description">${escapeHtml(item.description||'适用于当前项目的通用任务')}</div>
+              <div class="meta">
+                ${isPipelineTemplate(item)?'<span>开发流程</span>':'<span>即时执行</span>'}
+                ${item.defaults?.git?'<span>Git</span>':''}
+              </div>
             </button>`).join('')}
         </div>`).join('');
       syncTemplateSelection();

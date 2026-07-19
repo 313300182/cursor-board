@@ -286,12 +286,21 @@ class TaskQueue {
     if (!['failed', 'needs_human'].includes(task.status)) {
       throw new Error('仅 failed / needs_human 状态可重试');
     }
-    const retryError = String(task.error_message || '').trim();
     const variables = { ...(task.variables || {}) };
-    if (retryError) {
-      variables.__retry_error = retryError;
-    } else {
+    const parked = Boolean(variables.__parked_awaiting);
+    let retryError = '';
+    if (parked) {
+      // 因等待人工超时转异常的任务：续跑之前的会话上下文，不做“修复”提示
+      delete variables.__parked_awaiting;
       delete variables.__retry_error;
+      variables.__resume_after_park = true;
+    } else {
+      retryError = String(task.error_message || '').trim();
+      if (retryError) {
+        variables.__retry_error = retryError;
+      } else {
+        delete variables.__retry_error;
+      }
     }
     const updated = this.repo.updateForIteration(id, {
       status: 'pending',
@@ -300,14 +309,14 @@ class TaskQueue {
       started_at: null,
       finished_at: null,
       pipeline_phase: null,
-      session_id: null,
+      // 注意：session_id 不在 updateForIteration 白名单中，会被保留，从而续跑上下文
       variables,
     });
     this.repo.appendPendingQueuePosition(id);
     const queued = this.repo.getTask(id);
     this.repo.addEvent(id, 'status_change', {
       status: 'pending',
-      reason: 'retry',
+      reason: parked ? 'resume_after_park' : 'retry',
       retryError: retryError || null,
     });
     this.broadcast('task:status', queued);
@@ -454,6 +463,15 @@ class TaskQueue {
         task = { ...current, variables: retryError.variables };
       }
 
+      // 因等待人工超时转异常后重新入队：恢复会话上下文，只发一句续跑说明而非重跑整段原始提示词
+      if (task.variables?.__resume_after_park && resumeSessionId) {
+        const variables = { ...(task.variables || {}) };
+        delete variables.__resume_after_park;
+        current = this.repo.updateForIteration(task.id, { variables });
+        task = { ...current, variables };
+        prompt = buildResumeAfterParkPrompt();
+      }
+
       const executeLockPaths = taskWorkdirPaths(task);
       const runnerOptions = {
         taskId: task.id,
@@ -491,6 +509,22 @@ class TaskQueue {
           ...runnerOptions,
           mode: task.is_complex ? 'plan' : 'agent',
         });
+      if (result.awaitingInputTimeout) {
+        const parkedVariables = { ...(task.variables || {}), __parked_awaiting: true };
+        delete parkedVariables.__retry_error;
+        delete parkedVariables.__resume_after_park;
+        current = this.repo.updateStatus(task.id, {
+          status: 'needs_human',
+          error_message: '等待人工回复超时，已转异常；可重新入队继续回答（已保留上下文）。',
+          finished_at: new Date().toISOString(),
+          session_id: result.sessionId || task.session_id || null,
+        });
+        this.repo.updateForIteration(task.id, { variables: parkedVariables });
+        this.repo.addEvent(task.id, 'status_change', { status: 'needs_human', reason: 'human_wait_timeout' });
+        current = this.repo.getTask(task.id);
+        this.broadcast('task:status', current);
+        return;
+      }
       const awaitingDeploy = Boolean(task.pipeline_mode && result.awaitingDeploy);
       const completedStatus = awaitingDeploy ? 'pending_deploy' : 'done';
       if (result.suggestedTitle) {
@@ -573,4 +607,12 @@ function takeRetryError(task) {
   const variables = { ...(task.variables || {}) };
   delete variables.__retry_error;
   return { message, variables };
+}
+
+function buildResumeAfterParkPrompt() {
+  return [
+    '（已恢复上一轮会话，保留了之前的完整上下文）',
+    '此前你在等待我的确认/回答，但我当时未及时回复，任务被暂时挂起。',
+    '现在请继续之前尚未完成的工作；如果你仍需要我确认或补充信息，请再次向我提问。',
+  ].join('\n');
 }

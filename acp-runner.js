@@ -1,7 +1,12 @@
 const { execFileSync, spawn } = require('child_process');
 const readline = require('readline');
 const { buildQuestionResponse, buildPlanResponse } = require('./interactions');
-const { assertAgentResultSucceeded, isAgentAbortSummary, isTransientConnectionError } = require('./agent-errors');
+const {
+  assertAgentResultSucceeded,
+  isAgentAbortSummary,
+  isModelUnavailableError,
+  isTransientConnectionError,
+} = require('./agent-errors');
 const {
   MAX_TEST_RETRIES,
   MAX_MARKER_RETRIES,
@@ -17,6 +22,7 @@ const {
   buildGitMessagePrompt,
   parseGitMessage,
   buildRetryRepairPrompt,
+  buildPlanPrompt,
 } = require('./pipeline');
 const {
   captureBaselineDirty,
@@ -130,6 +136,8 @@ class AcpRunner {
     this.agentBin = config.cursor?.bin || 'agent';
     this.timeoutMs = config.cursor?.taskTimeoutMs || 1800000;
     this.idleTimeoutMs = config.cursor?.idleTimeoutMs || 480000;
+    // 等待人工回复的上限：超过则转异常（保留会话，可重新入队续跑）。0 表示无限等待
+    this.humanWaitTimeoutMs = config.cursor?.humanWaitTimeoutMs ?? 600000;
     this.security = config.security || {};
     this.pendingInteractions = new Map();
     this.activeRuns = new Map();
@@ -223,6 +231,8 @@ class AcpRunner {
   async submitInteraction(taskId, input) {
     const pending = this.pendingInteractions.get(taskId);
     if (!pending) throw new Error('任务当前没有等待中的交互');
+    // 人工已回复：恢复空闲/硬超时计时
+    this.activeRuns.get(taskId)?.endHumanWait?.();
     if (pending.type === 'question') {
       pending.respond(pending.requestId, buildQuestionResponse(input));
     } else if (pending.type === 'plan') {
@@ -362,7 +372,7 @@ class AcpRunner {
             workdirs,
           }));
         } else if (planMode) {
-          await session.prompt(appendTitleSuffix(prompt), attachments);
+          await session.prompt(buildPlanPrompt(appendTitleSuffix(prompt)), attachments);
           if (!session.context.planAccepted) {
             throw new Error('Plan 模式未生成可批准的计划');
           }
@@ -554,16 +564,28 @@ class AcpRunner {
         finish: null,
       };
 
-      let timer = null;
-      let idleTimer = null;
+      let monitorTimer = null;
       let lastActivityAt = Date.now();
+      let humanWaitStartedAt = null;
+      let humanWaitAccumMs = 0;
       const markActivity = () => { lastActivityAt = Date.now(); };
+      // 进入/退出"等待人工回复"：期间暂停空闲与硬超时判定，像 Cursor 一样一直等人回答
+      const beginHumanWait = () => {
+        if (humanWaitStartedAt === null) humanWaitStartedAt = Date.now();
+        markActivity();
+      };
+      const endHumanWait = () => {
+        if (humanWaitStartedAt !== null) {
+          humanWaitAccumMs += Date.now() - humanWaitStartedAt;
+          humanWaitStartedAt = null;
+        }
+        markActivity();
+      };
       const finish = (err, result) => {
         if (finished) return;
         finished = true;
         activeRun.finished = true;
-        if (timer) clearTimeout(timer);
-        if (idleTimer) clearInterval(idleTimer);
+        if (monitorTimer) clearInterval(monitorTimer);
         this.pendingInteractions.delete(taskId);
         this.activeRuns.delete(taskId);
         if (inputReader) inputReader.close();
@@ -590,22 +612,44 @@ class AcpRunner {
         else resolve(result);
       };
       activeRun.finish = finish;
+      activeRun.beginHumanWait = beginHumanWait;
+      activeRun.endHumanWait = endHumanWait;
       this.activeRuns.set(taskId, activeRun);
 
-      timer = setTimeout(() => {
-        finish(new Error(`任务超时（${this.timeoutMs}ms）`));
-      }, this.timeoutMs);
-
       const idleMs = this.idleTimeoutMs;
-      if (idleMs > 0) {
-        idleTimer = setInterval(() => {
-          if (finished) return;
-          if (Date.now() - lastActivityAt >= idleMs) {
-            finish(new Error(`Agent 空闲超时：${Math.round(idleMs / 1000)}s 无任何输出，判定卡死`));
+      const hardMs = this.timeoutMs;
+      const humanWaitMs = this.humanWaitTimeoutMs;
+      const monitorTick = Math.min(idleMs > 0 ? idleMs : 30000, 30000);
+      monitorTimer = setInterval(() => {
+        if (finished) return;
+        // 正在等待人工回复：不计空闲、不计硬超时（避免把"待确认"误杀为卡死）
+        if (humanWaitStartedAt !== null) {
+          // 但等待人工也有上限：超时则转异常，保留会话号供重新入队续跑
+          if (humanWaitMs > 0 && Date.now() - humanWaitStartedAt >= humanWaitMs) {
+            emit('log', {
+              chunk: `[system] 等待人工回复超过 ${Math.round(humanWaitMs / 60000)} 分钟，转异常（已保留上下文，可重新入队继续回答）\n`,
+              stream: 'system',
+            });
+            finish(null, {
+              awaitingInputTimeout: true,
+              sessionId,
+              resultSummary: (logChunks.join('').trim() || '(无文本输出)').slice(0, 4000),
+            });
+            return;
           }
-        }, Math.min(idleMs, 30000));
-        if (idleTimer.unref) idleTimer.unref();
-      }
+          markActivity();
+          return;
+        }
+        const now = Date.now();
+        if (hardMs > 0 && now - startedAt - humanWaitAccumMs >= hardMs) {
+          finish(new Error(`任务超时（${hardMs}ms）`));
+          return;
+        }
+        if (idleMs > 0 && now - lastActivityAt >= idleMs) {
+          finish(new Error(`Agent 空闲超时：${Math.round(idleMs / 1000)}s 无任何输出，判定卡死`));
+        }
+      }, monitorTick);
+      if (monitorTimer.unref) monitorTimer.unref();
 
       const send = (method, params = {}) => {
         const id = msgId++;
@@ -876,6 +920,8 @@ class AcpRunner {
             sessionId,
             context,
           });
+          beginHumanWait();
+          emit('log', { chunk: '[system] 已进入待确认，等待人工回复…\n', stream: 'system' });
           emit('interaction', interaction);
           return;
         }
@@ -901,6 +947,8 @@ class AcpRunner {
             sessionId,
             context,
           });
+          beginHumanWait();
+          emit('log', { chunk: '[system] 计划待批准，等待人工确认…\n', stream: 'system' });
           emit('interaction', interaction);
         }
       });
@@ -936,11 +984,21 @@ class AcpRunner {
             sessionId = sessionResult.sessionId;
           }
           if (modelId) {
-            await send('session/set_config_option', {
-              sessionId,
-              configId: 'model',
-              value: modelId,
-            });
+            try {
+              await send('session/set_config_option', {
+                sessionId,
+                configId: 'model',
+                value: modelId,
+              });
+            } catch (modelError) {
+              // ACP 对当前账号不可用的模型会返回 [unavailable]。不要让它阻断
+              // 任务的规划/执行，继续使用 ACP 已选定的默认模型。
+              if (!isModelUnavailableError(modelError)) throw modelError;
+              emit('log', {
+                chunk: `[system] 模型“${modelId}”当前不可用，将使用 ACP 默认模型继续执行\n`,
+                stream: 'system',
+              });
+            }
           }
           if (mode === 'plan') {
             await send('session/set_mode', { sessionId, modeId: 'plan' });

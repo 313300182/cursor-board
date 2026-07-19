@@ -325,6 +325,19 @@ function appendTitleSuffix(prompt) {
   return `${String(prompt || '').trim()}\n${buildTitlePromptSuffix()}`;
 }
 
+function buildPlanPrompt(prompt) {
+  return [
+    String(prompt || '').trim(),
+    '',
+    '【流水线 · Plan 阶段】',
+    '- 当前仅进行规划，不要修改任何文件，也不要执行开发或部署命令。',
+    '- 请先分析需求、现有代码结构和实现风险。',
+    '- 必须调用 ACP 的 create_plan 计划交互提交一份可供用户批准的具体计划，不能只在文本中描述计划。',
+    '- 计划中应包含拟修改的文件、主要实现步骤、验证方式和关键风险。',
+    '- 提交计划后等待用户批准；未获批准前不要开始执行。',
+  ].join('\n');
+}
+
 function statusForPhase(phase) {
   return PHASE_STATUS[phase] || phase;
 }
@@ -372,6 +385,7 @@ module.exports = {
   buildDeployRepairPrompt,
   buildRetryRepairPrompt,
   buildTitlePromptSuffix,
+  buildPlanPrompt,
   appendDevSuffix,
   appendTitleSuffix,
   statusForPhase,

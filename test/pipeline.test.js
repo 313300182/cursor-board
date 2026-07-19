@@ -15,6 +15,7 @@ const {
   buildGitMessagePrompt,
   parseGitMessage,
   truncateMiddle,
+  buildPlanPrompt,
 } = require('../pipeline');
 
 test('truncateMiddle 保留头尾并省略中间', () => {
@@ -91,6 +92,14 @@ test('parseTaskTitleMarker 解析标题标记', () => {
 
 test('appendTitleSuffix 追加标题总结说明', () => {
   assert.match(appendTitleSuffix('执行任务'), /\[TITLE:/);
+});
+
+test('buildPlanPrompt 明确要求通过 ACP 提交可批准计划', () => {
+  const prompt = buildPlanPrompt('设计新功能');
+  assert.match(prompt, /Plan 阶段/);
+  assert.match(prompt, /必须调用 ACP 的 create_plan/);
+  assert.match(prompt, /不能只在文本中描述计划/);
+  assert.match(prompt, /不要修改任何文件/);
 });
 
 test('statusForPhase 映射阶段到状态', () => {

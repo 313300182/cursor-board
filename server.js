@@ -69,18 +69,24 @@ function main() {
     root: ROOT,
   });
 
+  // 启动清扫：回收上一代看板（重新部署/崩溃）遗留的孤儿 agent 进程
+  const reclaimed = queue.runner.reclaimOrphans((message) => console.log(message));
+
   app.listen(port, host, () => {
     writePidFile(PID_PATH, process.pid);
     const cleanupPid = () => clearPidFile(PID_PATH);
+    const gracefulShutdown = () => {
+      try {
+        queue.runner.killAllRuns();
+      } catch {
+        // ignore：退出路径尽力而为
+      }
+      cleanupPid();
+      process.exit(0);
+    };
     process.once('exit', cleanupPid);
-    process.once('SIGINT', () => {
-      cleanupPid();
-      process.exit(0);
-    });
-    process.once('SIGTERM', () => {
-      cleanupPid();
-      process.exit(0);
-    });
+    process.once('SIGINT', gracefulShutdown);
+    process.once('SIGTERM', gracefulShutdown);
     console.log('');
     console.log('========================================');
     console.log('  Cursor Board MVP 已启动');
@@ -88,6 +94,7 @@ function main() {
     console.log('  访问保护: 已启用密码登录');
     console.log(`  恢复中断任务: ${recovered}`);
     console.log(`  恢复中断对话: ${recoveredChats}`);
+    console.log(`  回收残留进程: ${reclaimed.killed}/${reclaimed.total}`);
     console.log('========================================');
     console.log('');
     queue.kick();

@@ -25,6 +25,9 @@ const {
   buildCommitMessage,
 } = require('./git-runner');
 const { createAcpLogger } = require('./acp-logger');
+const agentRegistry = require('./agent-registry');
+
+const APP_ROOT = __dirname;
 const { normalizeAttachments } = require('./src/shared/validation');
 
 const MAX_PROMPT_RETRIES = 2;
@@ -126,6 +129,7 @@ class AcpRunner {
     this.config = config;
     this.agentBin = config.cursor?.bin || 'agent';
     this.timeoutMs = config.cursor?.taskTimeoutMs || 1800000;
+    this.idleTimeoutMs = config.cursor?.idleTimeoutMs || 480000;
     this.security = config.security || {};
     this.pendingInteractions = new Map();
     this.activeRuns = new Map();
@@ -152,6 +156,37 @@ class AcpRunner {
     if (!run.finished) {
       run.finish(new Error(reason));
     }
+  }
+
+  /**
+   * 优雅退出时同步回收所有在跑任务的进程树，避免看板重启后遗留孤儿进程。
+   * @returns {number} 被回收的运行中任务数
+   */
+  killAllRuns(reason = '看板重启，正在回收运行中的任务') {
+    const taskIds = Array.from(this.activeRuns.keys());
+    for (const taskId of taskIds) {
+      const run = this.activeRuns.get(taskId);
+      if (!run) continue;
+      run.aborted = true;
+      run.cancelReason = reason;
+      // 同步杀树，保证在 process.exit 之前真正完成
+      if (run.child?.pid) agentRegistry.killTree(run.child.pid);
+      if (!run.finished && typeof run.finish === 'function') {
+        try {
+          run.finish(new Error(reason));
+        } catch {
+          // ignore：退出路径尽力而为
+        }
+      }
+    }
+    return taskIds.length;
+  }
+
+  /**
+   * 启动清扫：回收上一代看板遗留的孤儿 agent 进程。
+   */
+  reclaimOrphans(log) {
+    return agentRegistry.sweep(APP_ROOT, { log });
   }
 
   steerTask(taskId, message, options = {}) {
@@ -504,6 +539,7 @@ class AcpRunner {
       const agentSpawn = buildAgentSpawn(this.agentBin, workdir);
       const child = spawn(agentSpawn.command, agentSpawn.args, agentSpawn.options);
 
+      agentRegistry.recordPid(APP_ROOT, { pid: child.pid, taskId, spawnAt: Date.now() });
       this.acpLog.write('spawn', { taskId, mode, workdir, pid: child.pid });
 
       const activeRun = {
@@ -519,11 +555,15 @@ class AcpRunner {
       };
 
       let timer = null;
+      let idleTimer = null;
+      let lastActivityAt = Date.now();
+      const markActivity = () => { lastActivityAt = Date.now(); };
       const finish = (err, result) => {
         if (finished) return;
         finished = true;
         activeRun.finished = true;
         if (timer) clearTimeout(timer);
+        if (idleTimer) clearInterval(idleTimer);
         this.pendingInteractions.delete(taskId);
         this.activeRuns.delete(taskId);
         if (inputReader) inputReader.close();
@@ -538,6 +578,7 @@ class AcpRunner {
           // ignore
         }
         killProcessTree(child);
+        agentRegistry.removePid(APP_ROOT, child.pid);
         this.acpLog.write('finish', {
           taskId,
           ok: !err,
@@ -554,6 +595,17 @@ class AcpRunner {
       timer = setTimeout(() => {
         finish(new Error(`任务超时（${this.timeoutMs}ms）`));
       }, this.timeoutMs);
+
+      const idleMs = this.idleTimeoutMs;
+      if (idleMs > 0) {
+        idleTimer = setInterval(() => {
+          if (finished) return;
+          if (Date.now() - lastActivityAt >= idleMs) {
+            finish(new Error(`Agent 空闲超时：${Math.round(idleMs / 1000)}s 无任何输出，判定卡死`));
+          }
+        }, Math.min(idleMs, 30000));
+        if (idleTimer.unref) idleTimer.unref();
+      }
 
       const send = (method, params = {}) => {
         const id = msgId++;
@@ -695,6 +747,7 @@ class AcpRunner {
       };
 
       child.stderr.on('data', (buf) => {
+        markActivity();
         const text = buf.toString().trim();
         if (text) {
           stderrTail = `${stderrTail}${text}\n`.slice(-8000);
@@ -718,13 +771,20 @@ class AcpRunner {
 
       child.on('exit', (code) => {
         this.acpLog.write('exit', { taskId, code, durationMs: Date.now() - startedAt });
-        if (!finished && code && code !== 0) {
+        if (finished) return;
+        if (code && code !== 0) {
           finish(new Error(`Agent 进程退出，code=${code}`));
+        } else {
+          finish(new Error('Agent 进程已退出，会话意外结束'));
         }
       });
 
       inputReader = readline.createInterface({ input: child.stdout });
+      inputReader.on('close', () => {
+        if (!finished) finish(new Error('Agent 输出流已关闭，会话意外结束'));
+      });
       inputReader.on('line', (line) => {
+        markActivity();
         let msg;
         try {
           msg = JSON.parse(line);

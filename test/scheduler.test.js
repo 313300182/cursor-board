@@ -94,6 +94,48 @@ test('不同项目指向同一物理目录时串行执行', async () => {
   for (const gate of gates.values()) gate.resolve();
 });
 
+test('内存不足时只放行第一个任务，恢复后再放行并发', async () => {
+  const started = [];
+  const gates = new Map();
+  const pending = [
+    { id: 'a1', project_id: 'a' },
+    { id: 'b1', project_id: 'b' },
+  ];
+  const repo = {
+    listTasks(status) {
+      return status === 'pending' ? pending.filter((task) => !started.includes(task.id)) : [];
+    },
+  };
+  let free = 512 * 1024 * 1024; // 低于 1GB 阈值
+  const scheduler = new ProjectScheduler({
+    repo,
+    maxConcurrent: 2,
+    minFreeMemMB: 1024,
+    memoryRetryMs: 5,
+    freeMem: () => free,
+    runTask: async (task) => {
+      started.push(task.id);
+      const gate = deferred();
+      gates.set(task.id, gate);
+      await gate.promise;
+    },
+  });
+
+  scheduler.kick();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  // 第一个任务永远放行，但内存不足时不再放行第二个
+  assert.equal(started.length, 1);
+  assert.equal(started[0], 'a1');
+
+  // 内存恢复后，延时重试会放行第二个
+  free = 4096 * 1024 * 1024;
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(started.includes('b1'), true);
+
+  for (const gate of gates.values()) gate.resolve();
+});
+
 test('plan 任务启动时不锁目录，同目录可并行规划', async () => {
   const started = [];
   const gates = new Map();

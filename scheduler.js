@@ -1,5 +1,8 @@
+const os = require('os');
 const WorkdirLock = require('./workdir-lock');
 const { normalizeWorkdirPath } = WorkdirLock;
+
+const DEFAULT_MEMORY_RETRY_MS = 15000;
 
 function taskWorkdirPaths(task) {
   const entries = Array.isArray(task?.workdirs) && task.workdirs.length
@@ -28,7 +31,16 @@ function isPlanTask(task) {
  * @author Amadeus
  */
 class ProjectScheduler {
-  constructor({ repo, maxConcurrent = 3, runTask, workdirLock }) {
+  constructor({
+    repo,
+    maxConcurrent = 3,
+    runTask,
+    workdirLock,
+    minFreeMemMB = 0,
+    memoryRetryMs = DEFAULT_MEMORY_RETRY_MS,
+    freeMem,
+    onMemoryDefer,
+  }) {
     this.repo = repo;
     this.maxConcurrent = maxConcurrent;
     this.runTask = runTask;
@@ -36,6 +48,25 @@ class ProjectScheduler {
     this.runningTasks = new Map();
     this.workdirLock = workdirLock || new WorkdirLock();
     this.workdirLock.onRelease(() => this.kick());
+    this.minFreeMemBytes = Math.max(0, Number(minFreeMemMB) || 0) * 1024 * 1024;
+    this.memoryRetryMs = Number(memoryRetryMs) > 0 ? Number(memoryRetryMs) : DEFAULT_MEMORY_RETRY_MS;
+    this.freeMem = typeof freeMem === 'function' ? freeMem : () => os.freemem();
+    this.onMemoryDefer = typeof onMemoryDefer === 'function' ? onMemoryDefer : () => {};
+    this.memoryTimer = null;
+  }
+
+  hasMemoryHeadroom() {
+    if (this.minFreeMemBytes <= 0) return true;
+    return this.freeMem() >= this.minFreeMemBytes;
+  }
+
+  scheduleMemoryRetry() {
+    if (this.memoryTimer) return;
+    this.memoryTimer = setTimeout(() => {
+      this.memoryTimer = null;
+      this.kick();
+    }, this.memoryRetryMs);
+    if (this.memoryTimer.unref) this.memoryTimer.unref();
   }
 
   get runningCount() {
@@ -55,6 +86,13 @@ class ProjectScheduler {
 
   kick() {
     while (this.runningCount < this.maxConcurrent) {
+      // 永远允许第 1 个任务运行以保证队列不卡死；只对“额外并发”任务做内存准入，
+      // 空闲内存不足时暂缓，待有任务结束或延时后重新尝试，从机制上避免 pile-on OOM。
+      if (this.runningCount > 0 && !this.hasMemoryHeadroom()) {
+        this.onMemoryDefer({ freeMem: this.freeMem(), minFreeMemBytes: this.minFreeMemBytes });
+        this.scheduleMemoryRetry();
+        return;
+      }
       const next = this.repo
         .listTasks('pending')
         .find((task) => this.canStart(task));

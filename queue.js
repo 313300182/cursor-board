@@ -55,6 +55,13 @@ class TaskQueue {
       maxConcurrent: config.queue?.maxConcurrent || 1,
       runTask: (task) => this.runTask(task),
       workdirLock: this.workdirLock,
+      minFreeMemMB: config.queue?.minFreeMemMB || 0,
+      memoryRetryMs: config.queue?.memoryRetryMs,
+      onMemoryDefer: ({ freeMem, minFreeMemBytes }) => {
+        console.warn(
+          `[queue] 空闲内存不足，暂缓并发新任务（free=${Math.round(freeMem / 1048576)}MB < ${Math.round(minFreeMemBytes / 1048576)}MB）`,
+        );
+      },
     });
   }
 

@@ -6,6 +6,7 @@
   "cursor": {
     "bin": "agent",
     "taskTimeoutMs": 1800000,
+    "idleTimeoutMs": 480000,
     "models": {
       "simpleDefault": "gpt-5.6-luna[context=272k,reasoning=medium,fast=false]",
       "complexDefault": "claude-opus-4-8[thinking=true,context=300k,effort=high,fast=false]",
@@ -66,6 +67,8 @@
     "autoAcceptPlan": true
   },
   "queue": {
-    "maxConcurrent": 1
+    "maxConcurrent": 2,
+    "minFreeMemMB": 3072,
+    "memoryRetryMs": 15000
   }
 }

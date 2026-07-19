@@ -631,17 +631,26 @@
     .option input{width:auto}
     .steer-panel{
       border:1px solid color-mix(in srgb,var(--st-running) 35%,transparent);
-      background:color-mix(in srgb,var(--st-running) 8%,transparent);
-      border-radius:var(--radius);
-      padding:12px;
+      background:linear-gradient(145deg,color-mix(in srgb,var(--st-running) 9%,var(--surface)),var(--surface));
+      border-radius:var(--radius-lg);
+      padding:14px;
       display:flex;
       flex-direction:column;
-      gap:8px;
+      gap:10px;
     }
-    .steer-panel h3{margin:0;font-size:13px;color:var(--text-2)}
-    .steer-panel textarea{min-height:72px;font-size:12px}
-    .steer-panel .toolbar{margin:0;flex-wrap:wrap}
-    .steer-panel .toolbar button{font-size:12px;padding:7px 10px}
+    .steer-panel h3{margin:0;font-size:13px;color:var(--text);font-weight:600}
+    .steer-panel textarea{min-height:88px;font-size:13px;background:var(--surface-2);border-color:var(--border-strong)}
+    .steer-panel .image-previews{margin-top:0}
+    .steer-compose-footer{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+    .steer-attachment-button{width:auto;font-size:12px!important;padding:7px 10px!important}
+    .steer-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+    .steer-actions button{font-size:12px;padding:7px 10px}
+    .steer-actions .danger{margin-left:2px}
+    @media(max-width:520px){
+      .steer-compose-footer{align-items:stretch;flex-direction:column}
+      .steer-actions{justify-content:stretch}
+      .steer-actions button{flex:1}
+    }
     .chat-modal-panel{display:flex;flex-direction:column;overflow:hidden}
     .chat-modal-header{padding:18px 18px 12px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
     .chat-modal-header h3{margin:0 0 4px}
@@ -3154,20 +3163,17 @@
       if(!isActiveTaskStatus(task.status))return '';
       return `
         <div class="steer-panel">
-          <h3>执行中对话</h3>
-          <p class="muted" style="margin:0;font-size:11px">发现执行偏差时可补充说明；消息会在当前步骤完成后注入，或尝试中断当前步骤。可直接 Ctrl+V 粘贴截图。</p>
-          <textarea id="steerMessage" placeholder="例如：这里改错了，应该用 Redis 而不是内存缓存；或者：跳过 mvn test"></textarea>
-          <div class="field-toolbar" style="margin-top:8px">
-            <div class="toolbar">
-              <button type="button" id="steerPasteImageBtn">粘贴图片</button>
-              <input type="file" accept="image/*" class="hidden" id="steerImageInput" multiple />
-            </div>
-          </div>
+          <h3>补充说明</h3>
+          <textarea id="steerMessage" placeholder="告诉 Agent 接下来要处理什么…"></textarea>
+          <input type="file" accept="image/*" class="hidden" id="steerImageInput" multiple />
           <div class="image-previews" data-image-list="steerMessage"></div>
-          <div class="toolbar">
-            <button type="button" class="primary" id="sendSteerBtn">发送说明</button>
-            ${task.pipeline_mode?'<button type="button" id="skipTestBtn">跳过测试</button>':''}
-            <button type="button" class="danger" id="cancelTaskBtn">终止任务</button>
+          <div class="steer-compose-footer">
+            <button type="button" class="steer-attachment-button" id="steerPasteImageBtn">添加图片</button>
+            <div class="steer-actions">
+              <button type="button" class="primary" id="sendSteerBtn">发送</button>
+              ${task.pipeline_mode?'<button type="button" id="skipTestBtn">跳过测试</button>':''}
+              <button type="button" class="danger" id="cancelTaskBtn">终止任务</button>
+            </div>
           </div>
           <div id="steerError" class="error"></div>
         </div>`;
@@ -3227,7 +3233,7 @@
       const message=$('steerMessage')?.value.trim()||'';
       const attachments=collectFieldAttachments('steerMessage');
       if(!skipTest&&!message&&!attachments.length){
-        if(steerError)steerError.textContent='请填写说明内容或粘贴图片';
+        if(steerError)steerError.textContent='请填写说明内容或添加图片';
         return;
       }
       const sendBtn=$('sendSteerBtn');

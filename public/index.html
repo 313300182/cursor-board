@@ -416,15 +416,17 @@
     }
     .switch input:checked+.slider{background:var(--accent)}
     .switch input:checked+.slider:before{transform:translateX(20px)}
-    .template-section{border:1px solid var(--border-strong);border-radius:10px;margin:16px 0 18px;background:var(--surface-2);overflow:hidden}
-    .template-section summary{cursor:pointer;font-weight:600;padding:12px 14px;font-size:13px;color:var(--text);list-style:none;display:flex;align-items:center;justify-content:space-between;gap:8px}
+    .template-section{border:1px solid var(--border-strong);border-radius:10px;margin:16px 0 18px;background:var(--surface-2);overflow:visible}
+    .template-section summary{cursor:pointer;font-weight:600;padding:10px 12px;font-size:13px;color:var(--text);list-style:none;display:flex;align-items:center;gap:10px;min-height:48px}
     .template-section summary::-webkit-details-marker{display:none}
-    .template-section summary::after{content:"▸";color:var(--text-2);font-size:11px;flex-shrink:0}
-    .template-section[open] summary{border-bottom:1px solid var(--border)}
-    .template-section[open] summary::after{content:"▾"}
-    .template-section summary .muted{font-weight:400;color:var(--accent-hover);background:var(--accent-subtle);border-radius:99px;padding:2px 8px}
-    .template-picker-body{padding:12px 14px 14px}
-    .template-category{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-2);margin:8px 0 7px;font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+    .template-section summary::after{content:"";width:7px;height:7px;margin-left:auto;border-right:1px solid var(--text-2);border-bottom:1px solid var(--text-2);transform:rotate(45deg) translateY(-2px);transition:transform var(--transition);flex-shrink:0}
+    .template-section[open] summary{border-bottom:1px solid var(--border);border-radius:10px 10px 0 0}
+    .template-section[open] summary::after{transform:rotate(225deg) translate(-1px,-1px)}
+    .template-summary-label{color:var(--text-2);font-size:12px;white-space:nowrap}
+    .template-section summary .muted{font-weight:600;color:var(--accent-hover);background:var(--accent-subtle);border-radius:99px;padding:3px 9px;white-space:nowrap}
+    .template-summary-description{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-3);font-size:11px;font-weight:400}
+    .template-picker-body{padding:10px 12px 12px;max-height:min(360px,42vh);overflow-y:auto}
+    .template-category{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-2);margin:7px 0 6px;font-weight:600;text-transform:uppercase;letter-spacing:.06em}
     .template-category:first-child{margin-top:0}
     .template-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px;margin-bottom:12px}
     .template-card{
@@ -806,8 +808,8 @@
         </div>
         <button type="button" id="createTaskCloseBtn" class="task-create-close" aria-label="关闭新建任务">关闭</button>
       </div>
-      <details id="templateSection" class="template-section" open>
-        <summary>任务类型 · <span id="templateSummary" class="muted">通用</span></summary>
+      <details id="templateSection" class="template-section">
+        <summary><span class="template-summary-label">任务类型</span><span id="templateSummary" class="muted">通用</span><span id="templateSummaryDescription" class="template-summary-description"></span></summary>
         <select id="templateSelect" class="hidden"></select>
         <div id="templatePicker" class="template-picker-body"></div>
       </details>
@@ -1565,6 +1567,8 @@
       const template=selectedTemplate();
       const summary=$('templateSummary');
       if(summary)summary.textContent=template?.name||'未选择';
+      const summaryDescription=$('templateSummaryDescription');
+      if(summaryDescription)summaryDescription.textContent=template?.description||'选择一个任务类型，查看对应的输入要求';
       renderGitCommitOptions();
       updateTitlePreview();
     }

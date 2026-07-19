@@ -53,9 +53,30 @@ function parseArgs(argv) {
 const nowIso = () => new Date().toISOString();
 const minutesAgo = (m) => new Date(Date.now() - m * 60000).toISOString();
 
-/** 预置一组覆盖各看板列的样例任务，让页面在无真实数据时也有真实布局。 */
-function seedSampleData(repo, projects) {
+/** 预置覆盖看板、弹窗和详情态的样例数据，保证截图内容稳定且可复现。 */
+function seedSampleData(repo, projects, chatRepo, projectTemplates, scheduleRepo) {
   const workdir = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-uishot-'));
+  const rulesDir = path.join(workdir, '.cursor', 'rules');
+  const skillsDir = path.join(workdir, '.cursor', 'skills', 'release-check');
+  fs.mkdirSync(rulesDir, { recursive: true });
+  fs.mkdirSync(skillsDir, { recursive: true });
+  fs.writeFileSync(path.join(rulesDir, 'ui-review.mdc'), `---
+description: UI review fixture
+---
+
+# UI review
+
+Keep the board readable at every supported viewport.
+`, 'utf8');
+  fs.writeFileSync(path.join(skillsDir, 'SKILL.md'), `---
+name: release-check
+description: Release verification fixture
+---
+
+# Release check
+
+Verify the visual report before shipping.
+`, 'utf8');
   const project = projects.createProject({
     id: 'ui-shot-demo',
     name: 'UI 自检样例项目',
@@ -85,7 +106,7 @@ function seedSampleData(repo, projects) {
   ];
 
   samples.forEach((s, i) => {
-    repo.createTask({
+    const task = repo.createTask({
       id: `ui-shot-task-${i + 1}`,
       project_id: project.id,
       title: s.title,
@@ -104,9 +125,77 @@ function seedSampleData(repo, projects) {
       source_schedule_id: null,
       created_at: minutesAgo(samples.length - i),
     });
+    if (['developing', 'failed', 'done'].includes(s.status)) {
+      repo.addEvent(task.id, 'log_chunk', {
+        stream: s.status === 'failed' ? 'system' : 'message',
+        chunk: s.status === 'failed'
+          ? '同步远端分支时发现冲突，等待处理。'
+          : `正在处理「${s.title}」，已完成视觉与结构检查。`,
+      });
+      repo.addEvent(task.id, 'permission', {
+        tool: 'filesystem',
+        action: 'read',
+      });
+    }
+    if (s.status === 'done') {
+      repo.updateStatus(task.id, {
+        result_summary: '已完成页面结构整理，并通过基础检查。',
+        finished_at: nowIso(),
+      });
+    }
+    if (s.status === 'failed') {
+      repo.updateStatus(task.id, {
+        error_message: '远端分支存在冲突，需要人工确认后重试。',
+        finished_at: nowIso(),
+      });
+    }
   });
 
-  return { project, workdir };
+  projectTemplates.create({
+    id: 'ui-shot-private-template',
+    project_id: project.id,
+    name: '发布检查',
+    category: '项目',
+    description: '发布前检查变更范围与验证结果',
+    defaults: { pipeline: true, git: true, complex: false },
+    variables: [{ name: 'scope', label: '检查范围', input: 'textarea', required: true }],
+    prompt: '请检查以下范围：{{scope}}',
+  });
+  const schedule = scheduleRepo.create({
+    id: 'ui-shot-schedule',
+    project_id: project.id,
+    template_id: 'general',
+    name: '工作日视觉回归',
+    variables: { requirement: '检查关键页面' },
+    workdirs: [{ label: '', path: workdir }],
+    trigger: 'cron',
+    cron_expr: '30 15 * * 1-5',
+    enabled: true,
+  });
+  const sessions = [
+    { id: 'ui-shot-chat-global', project_id: null, title: '全局排查', workdir, model_id: 'gpt-demo' },
+    { id: 'ui-shot-chat-project', project_id: project.id, title: '项目视觉检查', workdir, model_id: 'opus-demo' },
+  ];
+  sessions.forEach((session, index) => {
+    chatRepo.createSession({
+      ...session,
+      status: 'idle',
+      created_at: minutesAgo(12 - index),
+      updated_at: minutesAgo(8 - index),
+    });
+    chatRepo.addMessage(session.id, {
+      role: 'user',
+      content: index ? '请检查看板在窄屏下的布局。' : '请概览当前项目状态。',
+      created_at: minutesAgo(7 - index),
+    });
+    chatRepo.addMessage(session.id, {
+      role: 'assistant',
+      content: index ? '看板已按状态分组，建议继续检查弹窗滚动区域。' : '当前有待执行、开发中和异常任务。',
+      created_at: minutesAgo(6 - index),
+    });
+  });
+
+  return { project, workdir, schedule };
 }
 
 /** 组装一个内存版应用（复用真实路由，mock 掉会真正跑 agent 的副作用依赖）。 */
@@ -121,7 +210,13 @@ function buildEphemeralApp() {
   const templateService = createTemplateService({ projectTemplates });
   projects.ensureMachineProject();
 
-  const { project, workdir } = seedSampleData(repo, projects);
+  const { project, workdir } = seedSampleData(
+    repo,
+    projects,
+    chatRepo,
+    projectTemplates,
+    scheduleRepo,
+  );
 
   const token = crypto.randomBytes(16).toString('hex');
   const authService = {
@@ -214,8 +309,17 @@ const AUDIT_FN = () => {
     return parts.join(' > ');
   };
 
+  const visibleModals = Array.from(document.querySelectorAll('.modal-backdrop'))
+    .filter((el) => getComputedStyle(el).display !== 'none');
+  const activeModal = visibleModals[visibleModals.length - 1] || null;
+  const inActiveView = (el) => {
+    if (!activeModal) return true;
+    return el.closest('.modal-backdrop') === activeModal;
+  };
+
   const scrollers = [];
   document.querySelectorAll('*').forEach((el) => {
+    if (!inActiveView(el)) return;
     const style = getComputedStyle(el);
     const oy = style.overflowY;
     const scrollable = (oy === 'auto' || oy === 'scroll')
@@ -242,7 +346,9 @@ const AUDIT_FN = () => {
     return false;
   };
   document.querySelectorAll('*').forEach((parent) => {
+    if (!inActiveView(parent)) return;
     const kids = Array.from(parent.children).filter((el) => {
+      if (!inActiveView(el)) return false;
       const s = getComputedStyle(el);
       if (s.position === 'absolute' || s.position === 'fixed') return false;
       if (s.display === 'none' || s.visibility === 'hidden' || Number(s.opacity) === 0) return false;
@@ -290,9 +396,15 @@ async function capture(page, baseUrl, token, target) {
   page.on('console', (msg) => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
   page.on('pageerror', (err) => consoleErrors.push(String(err && err.message || err)));
 
-  await page.addInitScript((t) => {
-    try { localStorage.setItem('cursorBoardToken', t); } catch { /* ignore */ }
-  }, token);
+  if (!target.skipToken) {
+    await page.addInitScript((t) => {
+      try { localStorage.setItem('cursorBoardToken', t); } catch { /* ignore */ }
+    }, token);
+  } else {
+    await page.addInitScript(() => {
+      try { localStorage.removeItem('cursorBoardToken'); } catch { /* ignore */ }
+    });
+  }
 
   await page.goto(`${baseUrl}${target.pathAndQuery}`, { waitUntil: 'load', timeout: 20000 });
   try {
@@ -303,6 +415,11 @@ async function capture(page, baseUrl, token, target) {
   for (const step of (target.actions || [])) {
     try {
       if (step.click) await page.click(step.click, { timeout: 6000 });
+      if (step.clearToken) {
+        await page.evaluate(() => localStorage.removeItem('cursorBoardToken'));
+        await page.reload({ waitUntil: 'load', timeout: 20000 });
+      }
+      if (step.reload) await page.reload({ waitUntil: 'load', timeout: 20000 });
       if (step.waitFor) await page.waitForSelector(step.waitFor, { timeout: 6000 });
     } catch { /* 步骤失败仍截图便于排查 */ }
   }
@@ -341,7 +458,34 @@ async function main() {
   });
 
   const targets = [
-    { name: 'home', pathAndQuery: '/', waitFor: '#homeView, .project-grid' },
+    { name: 'home', pathAndQuery: '/', waitFor: '#projectGrid' },
+    {
+      name: 'home-create-project',
+      pathAndQuery: '/',
+      waitFor: '#projectGrid',
+      clipSelector: '#createProjectModal',
+      actions: [{ click: '#openCreateProjectBtn', waitFor: '#createProjectModal:not(.hidden)' }],
+    },
+    {
+      name: 'home-global-chat',
+      pathAndQuery: '/',
+      waitFor: '#projectGrid',
+      clipSelector: '#chatModal',
+      actions: [{ click: '#openGlobalChatBtn', waitFor: '#chatModal:not(.hidden)' }],
+    },
+    {
+      name: 'security-password',
+      pathAndQuery: '/',
+      waitFor: '#projectGrid',
+      clipSelector: '#passwordModal',
+      actions: [{ click: '#securityBtn', waitFor: '#passwordModal:not(.hidden)' }],
+    },
+    {
+      name: 'login-gate',
+      pathAndQuery: '/',
+      skipToken: true,
+      waitFor: '#loginGate:not(.hidden)',
+    },
   ];
   if (projectId) {
     const boardQuery = `/?project=${encodeURIComponent(projectId)}`;
@@ -360,6 +504,94 @@ async function main() {
         { click: '#templateSection > summary', waitFor: '.template-card' },
       ],
     });
+    targets.push(
+      {
+        name: 'project-chat',
+        pathAndQuery: boardQuery,
+        waitFor: '.board .column',
+        clipSelector: '#chatModal',
+        actions: [{ click: '#projectChatBtn', waitFor: '#chatModal:not(.hidden)' }],
+      },
+      {
+        name: 'schedules',
+        pathAndQuery: boardQuery,
+        waitFor: '.board .column',
+        clipSelector: '#scheduleModal',
+        actions: [{ click: '#schedulesBtn', waitFor: '#scheduleModal:not(.hidden)' }],
+      },
+      {
+        name: 'schedule-editor',
+        pathAndQuery: boardQuery,
+        waitFor: '.board .column',
+        clipSelector: '#scheduleModal',
+        actions: [
+          { click: '#schedulesBtn', waitFor: '#scheduleModal:not(.hidden)' },
+          { click: '#addScheduleBtn', waitFor: '#scheduleEditor:not(.hidden)' },
+        ],
+      },
+      {
+        name: 'cursor-rules',
+        pathAndQuery: boardQuery,
+        waitFor: '.board .column',
+        clipSelector: '#rulesModal',
+        actions: [{ click: '#rulesBtn', waitFor: '#rulesModal:not(.hidden)' }],
+      },
+      {
+        name: 'cursor-skills',
+        pathAndQuery: boardQuery,
+        waitFor: '.board .column',
+        clipSelector: '#skillsModal',
+        actions: [{ click: '#skillsBtn', waitFor: '#skillsModal:not(.hidden)' }],
+      },
+      {
+        name: 'project-config',
+        pathAndQuery: boardQuery,
+        waitFor: '.board .column',
+        clipSelector: '#projectConfigModal',
+        actions: [{ click: '#projectConfigBtn', waitFor: '#projectConfigModal:not(.hidden)' }],
+      },
+      {
+        name: 'template-editor',
+        pathAndQuery: boardQuery,
+        waitFor: '.board .column',
+        clipSelector: '#templateEditorModal',
+        actions: [
+          { click: '#projectConfigBtn', waitFor: '#projectConfigModal:not(.hidden)' },
+          { click: '#addPrivateTemplateBtn', waitFor: '#templateEditorModal:not(.hidden)' },
+        ],
+      },
+      {
+        name: 'task-detail-running',
+        pathAndQuery: boardQuery,
+        waitFor: '.board .column',
+        clipSelector: '#taskDetailModal',
+        actions: [{ click: '[data-task="ui-shot-task-4"]', waitFor: '#taskDetailModal:not(.hidden)' }],
+      },
+      {
+        name: 'task-detail-failed',
+        pathAndQuery: boardQuery,
+        waitFor: '.board .column',
+        clipSelector: '#taskDetailModal',
+        actions: [{ click: '[data-task="ui-shot-task-14"]', waitFor: '#taskDetailModal:not(.hidden)' }],
+      },
+      {
+        name: 'task-detail-completed',
+        pathAndQuery: boardQuery,
+        waitFor: '.board .column',
+        clipSelector: '#taskDetailModal',
+        actions: [{ click: '[data-task="ui-shot-task-11"]', waitFor: '#taskDetailModal:not(.hidden)' }],
+      },
+      {
+        name: 'iterate-task',
+        pathAndQuery: boardQuery,
+        waitFor: '.board .column',
+        clipSelector: '#iterateModal',
+        actions: [
+          { click: '[data-task="ui-shot-task-11"]', waitFor: '#taskDetailModal:not(.hidden)' },
+          { click: '#iterateBtn', waitFor: '#iterateModal:not(.hidden)' },
+        ],
+      },
+    );
   }
 
   const report = {

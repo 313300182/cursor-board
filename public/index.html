@@ -593,14 +593,21 @@
     .config-grid>.modal-section:nth-of-type(-n+2){margin-top:6px;padding-top:0;border-top:none}
     .config-grid>.modal-section.span-2{grid-column:1 / -1}
     @media(max-width:720px){.config-grid{grid-template-columns:1fr}.config-grid>.modal-section:nth-of-type(2){margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}}
-    .task-create-modal-panel{width:min(720px,96vw);max-height:92vh;overflow-y:auto}
+    .task-create-modal-panel{width:min(920px,calc(100vw - 32px));max-height:min(92vh,900px);overflow-y:auto}
     .task-create-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
     .task-create-header h3{margin:0 0 4px}
     .task-create-header .muted{margin:0}
     .task-create-close{padding:4px 10px;font-size:12px;flex-shrink:0}
+    .task-create-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px}
+    .task-create-options .switch-row{min-width:0;margin-top:0;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface-2)}
+    .task-create-options .switch-row>div{min-width:0}
+    .task-create-options .switch-row strong{font-size:13px}
+    .task-create-options .switch-row .muted{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .task-create-options .switch{flex:0 0 auto;margin-left:8px}
     .task-create-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)}
     @media(max-width:760px){
       .task-create-modal-panel{width:min(100%,calc(100vw - 24px))}
+      .task-create-options{grid-template-columns:1fr}
     }
     #globalTemplateList{max-height:260px;overflow-y:auto;padding-right:2px}
     #privateTemplateList{max-height:260px;overflow-y:auto;padding-right:2px}
@@ -763,6 +770,11 @@
         </div>
         <button type="button" id="createTaskCloseBtn" class="task-create-close" aria-label="关闭新建任务">关闭</button>
       </div>
+      <details id="templateSection" class="template-section" open>
+        <summary>任务类型 · <span id="templateSummary" class="muted">通用</span></summary>
+        <select id="templateSelect" class="hidden"></select>
+        <div id="templatePicker" class="template-picker-body"></div>
+      </details>
       <div id="titlePreviewGroup">
         <label>任务标题</label>
         <div id="titlePreview" class="muted" style="font-size:13px;line-height:1.5;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface-2)">填写任务描述后预览，执行时 AI 将总结正式标题</div>
@@ -774,18 +786,15 @@
       <div id="workdirGroup"><label>工作目录</label><input id="workdirInput" placeholder="本机任务必须指定目录" /></div>
       <div id="taskWorkdirGroup" class="hidden"><label>工作目录 <span class="muted">(可多选，适合前后端联动)</span></label><div id="taskWorkdirChecks" class="workdir-check-list"></div></div>
       <div id="variableFields" class="variable-fields"></div>
-      <details id="templateSection" class="template-section">
-        <summary>任务类型 · <span id="templateSummary" class="muted">通用</span></summary>
-        <select id="templateSelect" class="hidden"></select>
-        <div id="templatePicker" class="template-picker-body"></div>
-      </details>
-      <div class="switch-row">
-        <div><strong>Plan 模式</strong><div class="muted" style="font-size:11px">开启后先规划，批准后再继续开发、测试与部署</div></div>
-        <label class="switch"><input id="planInput" type="checkbox"><span class="slider"></span></label>
-      </div>
-      <div id="gitCommitRow" class="switch-row hidden">
-        <div><strong>Git</strong><div class="muted" style="font-size:11px">测试通过后自动 commit，并按项目设置 push</div></div>
-        <label class="switch"><input id="gitCommitInput" type="checkbox" checked><span class="slider"></span></label>
+      <div class="task-create-options">
+        <div class="switch-row">
+          <div><strong>Plan 模式</strong><div class="muted" style="font-size:11px">先规划，批准后继续开发</div></div>
+          <label class="switch"><input id="planInput" type="checkbox"><span class="slider"></span></label>
+        </div>
+        <div id="gitCommitRow" class="switch-row hidden">
+          <div><strong>Git</strong><div class="muted" style="font-size:11px">测试通过后自动提交</div></div>
+          <label class="switch"><input id="gitCommitInput" type="checkbox" checked><span class="slider"></span></label>
+        </div>
       </div>
       <label>执行模型</label><select id="modelSelect"></select>
       <div id="taskError" class="error"></div>

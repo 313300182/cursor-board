@@ -231,10 +231,12 @@ class TaskQueue {
 
     const project = this.projects.getProject(source.project_id);
     const pipelineMode = Boolean(source.pipeline_mode);
-    const gitCommit = Object.prototype.hasOwnProperty.call(input, 'gitCommit')
+    const hasGitCommit = typeof input.gitCommit === 'boolean';
+    const gitCommit = hasGitCommit
       ? Boolean(input.gitCommit && project?.git_enabled && pipelineMode)
       : Boolean(project?.git_enabled && pipelineMode);
-    const gitPush = Object.prototype.hasOwnProperty.call(input, 'gitPush')
+    const hasGitPush = typeof input.gitPush === 'boolean';
+    const gitPush = hasGitPush
       ? Boolean(input.gitPush && gitCommit)
       : gitCommit;
 
@@ -242,7 +244,7 @@ class TaskQueue {
     const closedRound = events.filter((event) => event.type === 'iteration_round').length + 1;
     const nextRound = closedRound + 1;
     const variables = { ...source.variables, requirement };
-    if (gitCommit && Object.prototype.hasOwnProperty.call(input, 'gitPush')) {
+    if (gitCommit && hasGitPush) {
       variables.__git_push = gitPush;
     } else {
       delete variables.__git_push;

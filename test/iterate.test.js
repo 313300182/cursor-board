@@ -192,7 +192,11 @@ test('iterateTask 默认启用 Git 提交并支持单独控制 push', () => {
     });
     repo.updateStatus(source.id, { status: 'done', finished_at: new Date().toISOString() });
 
-    const defaulted = queue.iterateTask(source.id, { requirement: '继续优化' });
+    const defaulted = queue.iterateTask(source.id, {
+      requirement: '继续优化',
+      gitCommit: undefined,
+      gitPush: undefined,
+    });
     assert.equal(defaulted.git_commit, true);
     repo.updateStatus(source.id, { status: 'done', finished_at: new Date().toISOString() });
 

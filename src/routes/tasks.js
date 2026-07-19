@@ -87,12 +87,17 @@ function createTasksRouter(deps) {
   }));
 
   router.post('/:id/iterate', asyncHandler(async (req, res) => {
-    const task = queue.iterateTask(req.params.id, {
+    const input = {
       requirement: req.body.requirement,
       attachments: req.body.attachments || [],
-      gitCommit: req.body.gitCommit,
-      gitPush: req.body.gitPush,
-    });
+    };
+    if (typeof req.body.gitCommit === 'boolean') {
+      input.gitCommit = req.body.gitCommit;
+    }
+    if (typeof req.body.gitPush === 'boolean') {
+      input.gitPush = req.body.gitPush;
+    }
+    const task = queue.iterateTask(req.params.id, input);
     res.json(task);
   }));
 

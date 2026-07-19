@@ -614,7 +614,10 @@ function createTaskRepo(db) {
       ];
       const entries = fields.filter((field) => Object.prototype.hasOwnProperty.call(patch, field));
       const assignments = entries.map((field) => `${field} = @${field}`).join(', ');
-      const values = { id, ...patch };
+      const values = { id };
+      for (const field of entries) {
+        values[field] = patch[field] === undefined ? null : patch[field];
+      }
       if (Object.prototype.hasOwnProperty.call(patch, 'git_commit')) {
         values.git_commit = patch.git_commit ? 1 : 0;
       }

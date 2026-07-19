@@ -28,8 +28,13 @@ function isAgentAbortSummary(text) {
 }
 
 function isModelUnavailableError(errOrText) {
-  const text = String(errOrText?.message || errOrText || '');
-  return /\[unavailable\]/i.test(text);
+  const parts = [];
+  if (errOrText && typeof errOrText === 'object') {
+    if (errOrText.message) parts.push(String(errOrText.message));
+    if (errOrText.data && errOrText.data.message) parts.push(String(errOrText.data.message));
+  }
+  const text = parts.length ? parts.join(' ') : String(errOrText || '');
+  return /\[unavailable\]/i.test(text) || /invalid\s+model\s+value/i.test(text);
 }
 
 function formatAgentTerminalError(text) {

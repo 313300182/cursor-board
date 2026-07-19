@@ -68,6 +68,14 @@ test('ECONNRESET 连接中断会被识别为可重试错误', () => {
 test('ACP 模型不可用错误会被识别', () => {
   assert.equal(isModelUnavailableError('Error: T: [unavailable] Error'), true);
   assert.equal(isModelUnavailableError('模型配置格式错误'), false);
+  assert.equal(
+    isModelUnavailableError({
+      code: -32602,
+      message: 'Invalid params',
+      data: { message: 'Invalid model value: gpt-5.6-luna-medium-fast' },
+    }),
+    true,
+  );
 });
 
 test('用户终止时 abort 摘要转为友好取消信息', () => {

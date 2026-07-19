@@ -1473,8 +1473,15 @@
       }
     }
 
+    function prettifyModelId(modelId){
+      // 兼容历史任务里存的旧括号格式（如 claude-opus-4-8[thinking=true,...]）：去掉参数并截断
+      const base=String(modelId||'').split('[')[0].trim();
+      if(!base)return '未指定';
+      return base.length>28?`${base.slice(0,27)}…`:base;
+    }
     function modelName(modelId){
-      return state.models.options.find(item=>item.id===modelId)?.name||modelId||'未指定';
+      if(!modelId)return '未指定';
+      return state.models.options.find(item=>item.id===modelId)?.name||prettifyModelId(modelId);
     }
 
     function renderModelOptions(){

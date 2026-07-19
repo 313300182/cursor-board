@@ -1,4 +1,4 @@
-const { spawn } = require('child_process');
+const { execFileSync, spawn } = require('child_process');
 const readline = require('readline');
 const { buildQuestionResponse, buildPlanResponse } = require('./interactions');
 const { assertAgentResultSucceeded } = require('./agent-errors');
@@ -24,6 +24,58 @@ const {
   buildCommitMessage,
 } = require('./git-runner');
 const { createAcpLogger } = require('./acp-logger');
+
+function buildAgentSpawn(agentBin, workdir) {
+  if (process.platform !== 'win32') {
+    return {
+      command: agentBin,
+      args: ['acp'],
+      options: {
+        cwd: workdir,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        windowsHide: true,
+        shell: false,
+      },
+    };
+  }
+
+  let resolved = agentBin;
+  try {
+    resolved = execFileSync('where.exe', [agentBin], {
+      encoding: 'utf8',
+      windowsHide: true,
+    }).split(/\r?\n/).find(Boolean) || agentBin;
+  } catch {
+    // Let cmd.exe report the normal executable-not-found error.
+  }
+
+  if (!/\.cmd$/i.test(resolved)) {
+    return {
+      command: resolved,
+      args: ['acp'],
+      options: {
+        cwd: workdir,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        windowsHide: true,
+        shell: false,
+      },
+    };
+  }
+
+  return {
+    command: process.env.ComSpec || 'cmd.exe',
+    args: ['/d', '/s', '/c', `"${resolved}" acp`],
+    options: {
+      cwd: workdir,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true,
+      shell: false,
+      // 参数已按 cmd.exe 规则手动加引号，禁止 Node 二次转义，
+      // 否则会被转成 \"...\" 导致 cmd 把带引号整串当命令名而报“不是内部或外部命令”。
+      windowsVerbatimArguments: true,
+    },
+  };
+}
 
 /**
  * Run tasks through Cursor Agent ACP with auto-approval.
@@ -388,12 +440,8 @@ class AcpRunner {
       const startedAt = Date.now();
       let stderrTail = '';
 
-      const child = spawn(this.agentBin, ['acp'], {
-        cwd: workdir,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        windowsHide: true,
-        shell: true,
-      });
+      const agentSpawn = buildAgentSpawn(this.agentBin, workdir);
+      const child = spawn(agentSpawn.command, agentSpawn.args, agentSpawn.options);
 
       this.acpLog.write('spawn', { taskId, mode, workdir, pid: child.pid });
 

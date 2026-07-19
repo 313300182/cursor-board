@@ -28,3 +28,13 @@ test('Plan 模式不再与流水线互斥', () => {
   assert.doesNotMatch(html, /complexInput\.disabled/);
   assert.match(html, /isComplex:\$\('planInput'\)\.checked/);
 });
+
+test('新建任务入口位于看板工具栏并使用弹窗承载表单', () => {
+  assert.match(html, /id="openCreateTaskBtn"[^>]*class="primary"/);
+  assert.match(html, /id="createTaskModal" class="modal-backdrop hidden"/);
+  assert.match(html, /role="dialog" aria-modal="true" aria-labelledby="createTaskTitle"/);
+  assert.match(html, /id="createTaskCloseBtn"/);
+  assert.match(html, /id="createTaskCancelBtn"/);
+  assert.match(html, /function openCreateTaskModal\(\)/);
+  assert.match(html, /function closeCreateTaskModal\(\)/);
+});

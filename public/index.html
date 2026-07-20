@@ -3013,6 +3013,26 @@
         <div class="markdown">${markdown(rule.content)}</div>`;
     }
 
+    function bindRulesListSelection(body){
+      body.querySelectorAll('[data-rule-index]').forEach(button=>{
+        button.onclick=()=>{
+          const index=Number(button.dataset.ruleIndex);
+          if(index===state.selectedRuleIndex)return;
+          state.selectedRuleIndex=index;
+          const list=body.querySelector('.rules-list');
+          const detail=body.querySelector('.rules-detail');
+          if(list&&detail){
+            list.querySelectorAll('.rules-list-item').forEach(item=>{
+              item.classList.toggle('active',Number(item.dataset.ruleIndex)===index);
+            });
+            detail.innerHTML=renderRuleDetail(state.rules[index]);
+            return;
+          }
+          renderRulesModalContent();
+        };
+      });
+    }
+
     function renderRulesModalContent(){
       const summary=$('rulesModalSummary');
       const body=$('rulesModalBody');
@@ -3040,12 +3060,7 @@
             </button>`).join('')}
         </div>
         <div class="rules-detail">${renderRuleDetail(selected)}</div>`;
-      body.querySelectorAll('[data-rule-index]').forEach(button=>{
-        button.onclick=()=>{
-          state.selectedRuleIndex=Number(button.dataset.ruleIndex);
-          renderRulesModalContent();
-        };
-      });
+      bindRulesListSelection(body);
     }
 
     function renderRules(){
@@ -3093,6 +3108,26 @@
         <div class="markdown">${markdown(skill.content)}</div>`;
     }
 
+    function bindSkillsListSelection(body){
+      body.querySelectorAll('[data-skill-index]').forEach(button=>{
+        button.onclick=()=>{
+          const index=Number(button.dataset.skillIndex);
+          if(index===state.selectedSkillIndex)return;
+          state.selectedSkillIndex=index;
+          const list=body.querySelector('.rules-list');
+          const detail=body.querySelector('.rules-detail');
+          if(list&&detail){
+            list.querySelectorAll('.rules-list-item').forEach(item=>{
+              item.classList.toggle('active',Number(item.dataset.skillIndex)===index);
+            });
+            detail.innerHTML=renderSkillDetail(state.skills[index]);
+            return;
+          }
+          renderSkillsModalContent();
+        };
+      });
+    }
+
     function renderSkillsModalContent(){
       const summary=$('skillsModalSummary');
       const body=$('skillsModalBody');
@@ -3120,12 +3155,7 @@
             </button>`).join('')}
         </div>
         <div class="rules-detail">${renderSkillDetail(selected)}</div>`;
-      body.querySelectorAll('[data-skill-index]').forEach(button=>{
-        button.onclick=()=>{
-          state.selectedSkillIndex=Number(button.dataset.skillIndex);
-          renderSkillsModalContent();
-        };
-      });
+      bindSkillsListSelection(body);
     }
 
     function renderSkills(){

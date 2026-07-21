@@ -78,7 +78,9 @@
       "format\\s+[a-z]:",
       "\\.env",
       "reg\\s+(add|delete)",
-      "curl.*\\|\\s*(ba)?sh"
+      "curl.*\\|\\s*(ba)?sh",
+      "taskkill(?:\\.exe)?[\\s\\S]{0,160}\\/im\\s*[\"']?node(?:\\.exe)?[\"']?",
+      "Stop-Process[\\s\\S]{0,100}-Name\\s+[\"']?node(?:\\.exe)?[\"']?"
     ],
     "autoApprove": true,
     "autoAcceptPlan": true

@@ -443,15 +443,16 @@ class TaskQueue {
         const status = payload.type === 'question'
           ? 'awaiting_input'
           : (payload.type === 'deploy' ? 'pending_deploy' : 'pending_approval');
-        this.repo.setInteraction(task.id, payload);
+        const interactionPayload = { ...payload, resumeStatus: current.status };
+        this.repo.setInteraction(task.id, interactionPayload);
         if (payload.type === 'plan') this.repo.setPlan(task.id, payload.plan);
         const updated = this.repo.updateStatus(task.id, {
           status,
           pipeline_phase: payload.type === 'deploy' ? 'pending_deploy' : task.pipeline_phase,
         });
-        this.repo.addEvent(task.id, 'interaction', payload);
+        this.repo.addEvent(task.id, 'interaction', interactionPayload);
         this.repo.addEvent(task.id, 'status_change', { status });
-        this.broadcast('task:interaction', { id: task.id, ...payload });
+        this.broadcast('task:interaction', { id: task.id, ...interactionPayload });
         this.broadcast('task:status', updated);
         current = updated;
       }
@@ -590,6 +591,21 @@ class TaskQueue {
         return updated;
       }
       return this.repo.getTask(id);
+    }
+
+    if (task.interaction?.type === 'permission') {
+      const resumeStatus = task.interaction.resumeStatus;
+      await this.runner.submitInteraction(id, { allowed: Boolean(input.allowed) });
+      this.repo.setInteraction(id, null);
+      const status = resumeStatus
+        || (task.pipeline_mode && task.pipeline_phase
+          ? statusForPhase(task.pipeline_phase)
+          : 'running');
+      const updated = this.repo.updateStatus(id, { status });
+      this.repo.addEvent(id, 'interaction_response', input);
+      this.repo.addEvent(id, 'status_change', { status, reason: 'permission_response' });
+      this.broadcast('task:status', updated);
+      return updated;
     }
 
     await this.runner.submitInteraction(id, input);

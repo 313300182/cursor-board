@@ -32,9 +32,58 @@ const {
 } = require('./git-runner');
 const { createAcpLogger } = require('./acp-logger');
 const agentRegistry = require('./agent-registry');
+const { PID_PATH } = require('./src/config');
+const { readPidFile } = require('./deploy-restart');
 
 const APP_ROOT = __dirname;
 const { normalizeAttachments } = require('./src/shared/validation');
+
+const BOARD_SELF_KILL_REASON = '禁止终止看板自身进程';
+
+/**
+ * 收集看板自身受保护 PID（当前服务进程 + server.pid）。
+ * @author Amadeus
+ */
+function collectBoardProtectedPids({ pidPath = PID_PATH, currentPid = process.pid } = {}) {
+  const pids = new Set();
+  if (Number.isFinite(Number(currentPid)) && Number(currentPid) > 0) {
+    pids.add(String(Number(currentPid)));
+  }
+  const fromFile = readPidFile(pidPath);
+  if (fromFile) pids.add(String(fromFile));
+  return [...pids];
+}
+
+/**
+ * 判断权限请求是否试图终止看板自身（或整杀 node）。
+ * @author Amadeus
+ */
+function isBoardSelfKillAttempt(text, options = {}) {
+  const raw = String(text || '');
+  if (!raw) return false;
+
+  // 整杀 node 会把看板服务一起干掉
+  if (
+    /taskkill(?:\.exe)?[\s\S]{0,160}\/im\s*["']?node(?:\.exe)?["']?/i.test(raw)
+    || /Stop-Process[\s\S]{0,100}-Name\s+["']?node(?:\.exe)?["']?/i.test(raw)
+  ) {
+    return true;
+  }
+
+  const pids = options.pids || collectBoardProtectedPids(options);
+  for (const pid of pids) {
+    const escaped = String(pid).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const hit = [
+      new RegExp(`taskkill(?:\\.exe)?[\\s\\S]{0,160}(?:\\/pid)\\s*${escaped}\\b`, 'i'),
+      new RegExp(`Stop-Process[\\s\\S]{0,100}(?:-Id|-PID)\\s*${escaped}\\b`, 'i'),
+      new RegExp(`\\bkill(?:\\.exe)?\\s+(?:-\\w+\\s+)*${escaped}\\b`, 'i'),
+      new RegExp(`process\\.kill\\s*\\(\\s*${escaped}\\b`, 'i'),
+      new RegExp(`wmic[\\s\\S]{0,100}processid\\s*=\\s*${escaped}\\b`, 'i'),
+    ].some((re) => re.test(raw));
+    if (hit) return true;
+  }
+  return false;
+}
 
 const MAX_PROMPT_RETRIES = 2;
 const PROMPT_RETRY_DELAY_MS = 1500;
@@ -222,10 +271,20 @@ class AcpRunner {
     return { queued: Boolean(text || attachments.length), skipTest };
   }
 
-  shouldDenyPermission(params) {
+  getPermissionDenialReason(params) {
     const text = JSON.stringify(params || {});
+    if (isBoardSelfKillAttempt(text)) {
+      return BOARD_SELF_KILL_REASON;
+    }
     const patterns = this.security.denyPatterns || [];
-    return patterns.some((pattern) => new RegExp(pattern, 'i').test(text));
+    if (patterns.some((pattern) => new RegExp(pattern, 'i').test(text))) {
+      return 'deny pattern matched';
+    }
+    return null;
+  }
+
+  shouldDenyPermission(params) {
+    return Boolean(this.getPermissionDenialReason(params));
   }
 
   async submitInteraction(taskId, input) {
@@ -251,6 +310,17 @@ class AcpRunner {
       pending.resolveDeploy(input);
       this.pendingInteractions.delete(taskId);
       return;
+    } else if (pending.type === 'permission') {
+      const allowed = Boolean(input.allowed);
+      if (allowed && !pending.allowOnce) {
+        throw new Error('该操作不允许放行');
+      }
+      pending.respond(pending.requestId, {
+        outcome: {
+          outcome: 'selected',
+          optionId: allowed ? 'allow-once' : 'reject-once',
+        },
+      });
     }
     this.pendingInteractions.delete(taskId);
   }
@@ -886,12 +956,33 @@ class AcpRunner {
             return;
           }
 
-          if (this.shouldDenyPermission(msg.params)) {
-            emit('permission', { tool, action: 'denied', reason: 'deny pattern matched' });
-            respond(msg.id, {
-              outcome: { outcome: 'selected', optionId: 'reject-once' },
+          const denialReason = this.getPermissionDenialReason(msg.params);
+          if (denialReason) {
+            emit('permission', { tool, action: 'denied', reason: denialReason });
+            const allowOnce = denialReason !== BOARD_SELF_KILL_REASON;
+            const interaction = {
+              type: 'permission',
+              title: allowOnce ? '命中安全规则，需人工确认是否放行' : '禁止终止看板自身进程',
+              tool,
+              reason: denialReason,
+              allowOnce,
+            };
+            this.pendingInteractions.set(taskId, {
+              type: 'permission',
+              requestId: msg.id,
+              respond,
+              tool,
+              denialReason,
+              allowOnce,
             });
-            finish(new Error('命中安全拒绝规则，任务转人工'));
+            beginHumanWait();
+            emit('log', {
+              chunk: allowOnce
+                ? '[system] 命令命中安全规则，已进入待确认，等待人工决定是否放行…\n'
+                : '[system] 禁止终止看板自身进程，已进入待确认，请拒绝后让 Agent 换方案…\n',
+              stream: 'system',
+            });
+            emit('interaction', interaction);
             return;
           }
 
@@ -1049,3 +1140,5 @@ function normalizeSteerAttachments(raw) {
 }
 
 module.exports = AcpRunner;
+module.exports.collectBoardProtectedPids = collectBoardProtectedPids;
+module.exports.isBoardSelfKillAttempt = isBoardSelfKillAttempt;

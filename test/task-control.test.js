@@ -40,6 +40,119 @@ test('AcpRunner.steerTask 对未运行任务报错', () => {
   assert.throws(() => runner.steerTask('missing', 'hello'), /未在运行中/);
 });
 
+test('isBoardSelfKillAttempt 拦截针对看板 PID 的 taskkill', () => {
+  const { isBoardSelfKillAttempt } = AcpRunner;
+  assert.equal(
+    isBoardSelfKillAttempt('taskkill /PID 3272 /T /F', { pids: ['3272'] }),
+    true,
+  );
+  assert.equal(
+    isBoardSelfKillAttempt('Stop-Process -Id 3272 -Force', { pids: ['3272'] }),
+    true,
+  );
+  assert.equal(
+    isBoardSelfKillAttempt('taskkill /PID 9999 /T /F', { pids: ['3272'] }),
+    false,
+  );
+});
+
+test('isBoardSelfKillAttempt 拦截整杀 node 进程', () => {
+  const { isBoardSelfKillAttempt } = AcpRunner;
+  assert.equal(isBoardSelfKillAttempt('taskkill /IM node.exe /F'), true);
+  assert.equal(isBoardSelfKillAttempt('Stop-Process -Name node -Force'), true);
+});
+
+test('shouldDenyPermission 拒绝终止看板自身进程', () => {
+  const runner = new AcpRunner({ security: { denyPatterns: [] } });
+  const params = {
+    toolCall: { title: `taskkill /PID ${process.pid} /T /F` },
+  };
+  assert.equal(runner.getPermissionDenialReason(params), '禁止终止看板自身进程');
+  assert.equal(runner.shouldDenyPermission(params), true);
+  assert.equal(
+    runner.shouldDenyPermission({ toolCall: { title: 'npm test' } }),
+    false,
+  );
+});
+
+test('submitInteraction permission 拒绝后回复 reject-once', async () => {
+  const runner = new AcpRunner({ security: {} });
+  let responded;
+  runner.pendingInteractions.set('task-1', {
+    type: 'permission',
+    requestId: 'req-1',
+    allowOnce: false,
+    respond(id, payload) {
+      responded = { id, payload };
+    },
+  });
+  runner.activeRuns.set('task-1', { endHumanWait() {} });
+  await runner.submitInteraction('task-1', { allowed: false });
+  assert.deepEqual(responded, {
+    id: 'req-1',
+    payload: { outcome: { outcome: 'selected', optionId: 'reject-once' } },
+  });
+  assert.equal(runner.pendingInteractions.has('task-1'), false);
+});
+
+test('submitInteraction permission 禁止放行看板 kill', async () => {
+  const runner = new AcpRunner({ security: {} });
+  runner.pendingInteractions.set('task-1', {
+    type: 'permission',
+    requestId: 'req-1',
+    allowOnce: false,
+    respond() {},
+  });
+  runner.activeRuns.set('task-1', { endHumanWait() {} });
+  await assert.rejects(
+    () => runner.submitInteraction('task-1', { allowed: true }),
+    /不允许放行/,
+  );
+});
+
+test('TaskQueue.submitInteraction permission 恢复 resumeStatus', async () => {
+  let submitted;
+  const task = {
+    id: 'task-1',
+    status: 'pending_approval',
+    pipeline_mode: true,
+    pipeline_phase: 'dev',
+    interaction: {
+      type: 'permission',
+      resumeStatus: 'developing',
+      allowOnce: true,
+    },
+  };
+  const repo = {
+    getTask() {
+      return task;
+    },
+    setInteraction(_id, value) {
+      task.interaction = value;
+    },
+    updateStatus(_id, patch) {
+      Object.assign(task, patch);
+      return { ...task };
+    },
+    addEvent() {},
+  };
+  const queue = new TaskQueue({
+    repo,
+    projects: {},
+    config: {},
+    broadcast() {},
+  });
+  queue.runner = {
+    async submitInteraction(_id, input) {
+      submitted = input;
+    },
+  };
+  const updated = await queue.submitInteraction('task-1', { allowed: false });
+  assert.deepEqual(submitted, { allowed: false });
+  assert.equal(updated.status, 'developing');
+  assert.equal(task.interaction, null);
+});
+
 test('TaskQueue.cancelTask 委托 runner 终止', () => {
   let cancelled = false;
   const { queue } = createControlQueue({

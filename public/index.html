@@ -660,6 +660,7 @@
       padding:12px;
       margin-top:12px;
     }
+    .interaction .tool-preview{white-space:pre-wrap;word-break:break-all;background:color-mix(in srgb,var(--st-queued) 14%,transparent);border-radius:8px;padding:8px 10px;margin:8px 0;font-size:12px}
     .option{display:flex;gap:8px;align-items:center;margin:7px 0}
     .option input{width:auto}
     .steer-panel{
@@ -3250,6 +3251,15 @@
           <label>拒绝原因（拒绝时可填）</label><textarea id="planReason"></textarea>
           <div class="toolbar"><button class="primary" onclick="respondPlan(true)">批准并执行</button><button onclick="respondPlan(false)">拒绝并继续规划</button></div>
         </div>`;
+      if(interaction.type==='permission')return `
+        <div class="interaction"><h3>${escapeHtml(interaction.title||'命令需人工确认')}</h3>
+          <p class="muted">${escapeHtml(interaction.reason||'')}</p>
+          <pre class="tool-preview">${escapeHtml(interaction.tool||'')}</pre>
+          <div class="toolbar">
+            ${interaction.allowOnce?'<button type="button" class="primary" onclick="respondPermission(true)">放行一次</button>':''}
+            <button type="button" onclick="respondPermission(false)">拒绝，让 Agent 换方案</button>
+          </div>
+        </div>`;
       return `<div class="interaction"><h3>${escapeHtml(interaction.title||'需要你的回答')}</h3>
         ${(interaction.questions||[]).map(question=>`
           <div class="question" data-question="${escapeHtml(question.id)}" data-multiple="${question.allowMultiple?'1':'0'}">
@@ -3471,7 +3481,11 @@
       await api(`/api/tasks/${state.selectedId}/interaction`,{method:'POST',body:JSON.stringify({answers})});
       await refreshTasks();
     }
-    window.respondPlan=respondPlan;window.respondQuestions=respondQuestions;
+    async function respondPermission(allowed){
+      await api(`/api/tasks/${state.selectedId}/interaction`,{method:'POST',body:JSON.stringify({allowed:Boolean(allowed)})});
+      await refreshTasks();
+    }
+    window.respondPlan=respondPlan;window.respondQuestions=respondQuestions;window.respondPermission=respondPermission;
 
     const {
       renderMessageBubble,

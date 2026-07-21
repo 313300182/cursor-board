@@ -621,6 +621,9 @@ function createTaskRepo(db) {
       if (Object.prototype.hasOwnProperty.call(patch, 'git_commit')) {
         values.git_commit = patch.git_commit ? 1 : 0;
       }
+      if (Object.prototype.hasOwnProperty.call(patch, 'deploy_completed')) {
+        values.deploy_completed = patch.deploy_completed ? 1 : 0;
+      }
       if (Object.prototype.hasOwnProperty.call(patch, 'variables')) {
         values.variables = JSON.stringify(patch.variables || {});
       }

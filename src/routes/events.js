@@ -21,11 +21,9 @@ function createEventsRouter(deps) {
 
     const heartbeat = setInterval(() => {
       try {
-        if (!res.write(`event: heartbeat\ndata: ${JSON.stringify({ ts: Date.now() })}\n\n`)) {
-          clearInterval(heartbeat);
-          broadcaster.remove(res);
-          res.destroy();
-        }
+        // write() 返回 false 仅表示 TCP 背压，数据仍会发出，不能据此断开连接，
+        // 否则会误杀正常但繁忙的 SSE 客户端。真正断开由下方 req 的 close 事件处理。
+        res.write(`event: heartbeat\ndata: ${JSON.stringify({ ts: Date.now() })}\n\n`);
       } catch (_) {
         clearInterval(heartbeat);
         broadcaster.remove(res);

@@ -15,6 +15,7 @@ const { resolveTaskModel } = require('./model-config');
 const { statusForPhase } = require('./pipeline');
 const {
   isWorkdirAllowed,
+  normalizePathForComparison,
   validateWorkdirs,
   normalizeAttachments,
 } = require('./src/shared/validation');
@@ -117,12 +118,12 @@ class TaskQueue {
     const result = [];
     for (const selected of selectedPaths) {
       const match = projectWorkdirs.find(
-        (entry) => entry.path.replace(/\//g, '\\').toLowerCase()
-          === selected.replace(/\//g, '\\').toLowerCase(),
+        (entry) => normalizePathForComparison(entry.path)
+          === normalizePathForComparison(selected),
       );
       if (!match) throw new Error(`所选工作目录不属于当前项目: ${selected}`);
-      const key = match.path.replace(/\//g, '\\').toLowerCase();
-      if (!result.some((entry) => entry.path.replace(/\//g, '\\').toLowerCase() === key)) {
+      const key = normalizePathForComparison(match.path);
+      if (!result.some((entry) => normalizePathForComparison(entry.path) === key)) {
         result.push(match);
       }
     }

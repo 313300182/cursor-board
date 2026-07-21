@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const express = require('express');
 const { validateVariables } = require('../../templates');
 const { asyncHandler, HttpError } = require('../middleware/error');
+const { normalizePathForComparison } = require('../shared/validation');
 
 function createSchedulesRouter(deps) {
   const {
@@ -61,8 +62,6 @@ function createSchedulesRouter(deps) {
     return payload;
   };
 
-  const normalizePath = (value) => String(value || '').replace(/\//g, '\\').toLowerCase();
-
   const validateWorkdirs = (project, payload, previous) => {
     const projectWorkdirs = project.workdirs || [];
     const selected = payload.workdirs !== undefined ? payload.workdirs : (previous?.workdirs || []);
@@ -76,7 +75,9 @@ function createSchedulesRouter(deps) {
       throw new HttpError(400, '该项目有多个工作目录，请至少选择一个');
     }
     for (const chosen of selectedPaths) {
-      const belongs = projectWorkdirs.some((entry) => normalizePath(entry.path) === normalizePath(chosen));
+      const belongs = projectWorkdirs.some(
+        (entry) => normalizePathForComparison(entry.path) === normalizePathForComparison(chosen),
+      );
       if (!belongs) throw new HttpError(400, `所选工作目录不属于当前项目: ${chosen}`);
     }
   };

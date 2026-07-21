@@ -5,6 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "start:bg": "node scripts/start-board.js",
     "deploy": "node scripts/deploy-board.js",
     "probe": "node scripts/acp-probe.js",
     "ui:shot": "node scripts/ui-shot.js",

@@ -140,6 +140,16 @@
     }
     .project-card:hover{background:var(--surface-hover);border-color:var(--border-strong)}
     .project-card .path{font-size:12px;color:var(--text-2);word-break:break-all;min-height:34px;white-space:pre-line}
+    .compatibility-panel{margin-top:16px}
+    .compatibility-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}
+    .compatibility-header h2{margin-bottom:4px}
+    .compatibility-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+    .compatibility-item{display:flex;align-items:flex-start;gap:9px;padding:9px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface-2)}
+    .compatibility-item .status-dot{width:8px;height:8px;border-radius:50%;margin-top:6px;flex:none;background:var(--st-failed)}
+    .compatibility-item.available .status-dot{background:var(--st-done)}
+    .compatibility-item strong{display:block;font-size:12px}
+    .compatibility-item .muted{font-size:11px;line-height:1.45;margin-top:2px}
+    @media(max-width:720px){.compatibility-list{grid-template-columns:1fr}}
     .workdir-list{display:flex;flex-direction:column;gap:8px;margin-top:4px}
     .workdir-row{display:grid;grid-template-columns:88px minmax(0,1fr) auto;gap:8px;align-items:center}
     .workdir-row input{margin:0}
@@ -768,6 +778,16 @@
         <button type="button" id="openCreateProjectBtn" class="primary">新增项目</button>
       </div>
       <div id="projectGrid" class="project-grid"></div>
+      <section class="panel compatibility-panel" aria-labelledby="compatibilityTitle">
+        <div class="compatibility-header">
+          <div>
+            <h2 id="compatibilityTitle">macOS 兼容性</h2>
+            <p class="muted" style="margin:0">已按当前配置整理 Mac 可用项与仍需 Windows 的功能。</p>
+          </div>
+          <span id="platformLabel" class="badge">检查中…</span>
+        </div>
+        <div id="compatibilityList" class="compatibility-list"></div>
+      </section>
     </section>
 
     <section id="projectView" class="project-layout hidden">
@@ -1154,7 +1174,7 @@
       project: null, projects: [], tasks: [], templates: [], allTemplates: [], tplEditorId: null,
       schedules: [], scheduleEditorId: null, rules: [], selectedRuleIndex: 0,
       skills: [], selectedSkillIndex: 0,
-      selectedId: null, logChunks: {}, taskEvents: {}, taskLogVisibleChars: {}, models: { options: [] }, fieldImages: {},
+      selectedId: null, logChunks: {}, taskEvents: {}, taskLogVisibleChars: {}, models: { options: [] }, platform: null, fieldImages: {},
       doneExpanded: false, archivedTasks: [], archivedCount: 0, showArchived: false,
       iterateSourceId: null,
       chat: {
@@ -1167,6 +1187,7 @@
         sessionsById: {},
       },
       eventSource: null,
+      sseWasConnected: false,
       projectViewBound: false,
       homeViewBound: false,
     };
@@ -1382,8 +1403,10 @@
     async function bootstrap(){
       const data=await api('/api/bootstrap');
       state.models=data.models||{options:[]};
+      state.platform=data.platform||null;
       state.allTemplates=await api('/api/templates');
       state.templates=state.allTemplates;
+      renderPlatformCompatibility();
     }
 
     function showLogin(message=''){
@@ -2791,6 +2814,17 @@
         .map(input=>input.value);
     }
 
+    function renderPlatformCompatibility(){
+      const list=$('compatibilityList');
+      if(!list||!state.platform)return;
+      $('platformLabel').textContent=`当前：${state.platform.label}`;
+      list.innerHTML=(state.platform.items||[]).map(item=>`
+        <div class="compatibility-item ${item.available?'available':''}">
+          <span class="status-dot" aria-hidden="true"></span>
+          <div><strong>${item.available?'可用':'不可用'} · ${escapeHtml(item.name)}</strong><div class="muted">${escapeHtml(item.detail)}</div></div>
+        </div>`).join('');
+    }
+
     async function loadHome(){
       state.projects=await api('/api/projects');
       renderProjectSwitcher();
@@ -3789,7 +3823,12 @@
       state.eventSource?.close();
       const source=new EventSource(`/api/events?token=${encodeURIComponent(state.token)}`);
       state.eventSource=source;
-      source.onopen=()=>{$('connState').textContent='实时连接'};
+      source.onopen=()=>{
+        $('connState').textContent='实时连接';
+        // 断线重连后，SSE 断开期间的状态变更事件已丢失，主动重新拉取一次看板对齐状态。
+        if(state.sseWasConnected&&state.projectId)refreshTasks();
+        state.sseWasConnected=true;
+      };
       source.onerror=()=>{$('connState').textContent='连接中断'};
       ['task:created','task:status','task:interaction','task:archived','queue:reordered'].forEach(name=>source.addEventListener(name,event=>{
         const payload=JSON.parse(event.data);

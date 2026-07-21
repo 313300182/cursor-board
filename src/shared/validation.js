@@ -1,13 +1,24 @@
 const fs = require('fs');
+const path = require('path');
 
 const MAX_ATTACHMENT_DATA_LENGTH = 3 * 1024 * 1024;
 const MAX_TOTAL_ATTACHMENT_DATA_LENGTH = 8 * 1024 * 1024;
 
+function normalizePathForComparison(value) {
+  const normalized = path.normalize(String(value || '').trim());
+  if (process.platform === 'win32') {
+    return normalized.replace(/[\\/]+$/, '').toLowerCase() || path.parse(normalized).root.toLowerCase();
+  }
+  return normalized.replace(/\\/g, '/').replace(/\/+$/, '') || '/';
+}
+
 function isWorkdirAllowed(workdir, allowedList) {
-  const normalized = workdir.replace(/\//g, '\\');
+  const normalized = normalizePathForComparison(workdir);
   return (allowedList || []).some((prefix) => {
-    const p = prefix.replace(/\//g, '\\');
-    return normalized.toLowerCase().startsWith(p.toLowerCase());
+    const p = normalizePathForComparison(prefix);
+    if (normalized === p) return true;
+    const separator = process.platform === 'win32' ? '\\' : '/';
+    return normalized.startsWith(`${p}${separator}`);
   });
 }
 
@@ -76,6 +87,7 @@ function normalizeAttachments(attachments, options = {}) {
 module.exports = {
   MAX_ATTACHMENT_DATA_LENGTH,
   isWorkdirAllowed,
+  normalizePathForComparison,
   validateWorkdirs,
   normalizeAttachments,
 };

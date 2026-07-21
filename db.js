@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const Database = require('better-sqlite3');
+const { normalizePathForComparison } = require('./src/shared/validation');
 
 const DATA_DIR = path.join(__dirname, 'data');
 const MAX_LOG_EVENTS_PER_TASK = 2000;
@@ -226,7 +227,7 @@ function normalizeWorkdirs(workdirs) {
   for (const entry of workdirs) {
     const normalized = normalizeWorkdirEntry(entry);
     if (!normalized) continue;
-    const key = normalized.path.replace(/\//g, '\\').toLowerCase();
+    const key = normalizePathForComparison(normalized.path);
     if (seen.has(key)) continue;
     seen.add(key);
     result.push(normalized);

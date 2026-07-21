@@ -1,5 +1,6 @@
 const express = require('express');
 const { getModelSettings } = require('../../model-config');
+const { getPlatformCompatibility } = require('../platform-compatibility');
 const { asyncHandler } = require('../middleware/error');
 
 function createSystemRouter(deps) {
@@ -21,6 +22,7 @@ function createSystemRouter(deps) {
       workdirDefault: root,
       workdirAllowlist: config.security?.workdirAllowlist || [],
       models: getModelSettings(config),
+      platform: getPlatformCompatibility(config),
     });
   }));
 

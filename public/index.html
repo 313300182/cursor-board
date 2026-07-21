@@ -139,7 +139,12 @@
       transition:border-color var(--transition),background-color var(--transition);
     }
     .project-card:hover{background:var(--surface-hover);border-color:var(--border-strong)}
+    .project-card .card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+    .project-card .card-head h2{margin:0}
     .project-card .path{font-size:12px;color:var(--text-2);word-break:break-all;min-height:34px;white-space:pre-line}
+    .project-del-btn{flex:none;font-size:12px;padding:2px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface-2);color:var(--text-2);cursor:pointer;opacity:0;transition:opacity var(--transition),color var(--transition),border-color var(--transition)}
+    .project-card:hover .project-del-btn{opacity:1}
+    .project-del-btn:hover{color:var(--st-failed);border-color:var(--st-failed)}
     .compatibility-panel{margin-top:16px}
     .compatibility-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}
     .compatibility-header h2{margin-bottom:4px}
@@ -2830,7 +2835,10 @@
       renderProjectSwitcher();
       $('projectGrid').innerHTML=state.projects.map(project=>`
         <a class="project-card" href="/?project=${encodeURIComponent(project.id)}" data-project-id="${escapeHtml(project.id)}">
-          <h2>${escapeHtml(project.name)} ${project.type==='machine'?'<span class="badge">系统</span>':''}</h2>
+          <div class="card-head">
+            <h2>${escapeHtml(project.name)} ${project.type==='machine'?'<span class="badge">系统</span>':''}</h2>
+            ${(project.type==='machine'||project.is_system)?'':`<button type="button" class="project-del-btn" data-delete-project="${escapeHtml(project.id)}" title="删除项目">删除</button>`}
+          </div>
           <div class="path">${escapeHtml(formatProjectWorkdirs(project))}</div>
           <div class="stats">
             <span class="stat-item"><b>${project.counts.pending||0}</b><span class="stat-label">待执行</span></span>
@@ -2845,6 +2853,37 @@
         event.preventDefault();
         navigateToProject(card.dataset.projectId);
       });
+      document.querySelectorAll('[data-delete-project]').forEach(btn=>btn.onclick=(event)=>{
+        event.preventDefault();
+        event.stopPropagation();
+        deleteProjectWithConfirm(btn.dataset.deleteProject);
+      });
+    }
+
+    function countActiveTasks(counts){
+      const c=counts||{};
+      return (c.developing||0)+(c.running||0)+(c.planning||0)+(c.testing||0)
+        +(c.committing||0)+(c.deploying||0)+(c.awaiting_input||0)+(c.pending_approval||0);
+    }
+
+    async function deleteProjectWithConfirm(projectId){
+      const project=(state.projects||[]).find(item=>String(item.id)===String(projectId));
+      if(!project)return;
+      if(project.is_system||project.type==='machine'){alert('系统项目不能删除');return;}
+      const active=countActiveTasks(project.counts);
+      if(active>0){
+        alert(`项目「${project.name}」还有 ${active} 个正在执行的任务，无法删除，请先等待或终止后再试。`);
+        return;
+      }
+      if(!window.confirm(`确定删除项目「${project.name}」？`))return;
+      if(!window.confirm('删除后该项目下所有任务将被归档，且项目本身不可恢复。确认继续？'))return;
+      try{
+        await api(`/api/projects/${encodeURIComponent(projectId)}`,{method:'DELETE'});
+        await loadHome();
+      }catch(error){
+        alert(error.message||'删除项目失败');
+        await loadHome();
+      }
     }
 
     function syncProjectGitPushVisibility(){
@@ -3841,6 +3880,15 @@
           refreshTasks().then(renderProjectDeploy);
         }
       }));
+      source.addEventListener('project:deleted',event=>{
+        const payload=JSON.parse(event.data);
+        state.projects=(state.projects||[]).filter(project=>String(project.id)!==String(payload.id));
+        if(state.projectId&&String(state.projectId)===String(payload.id)){
+          navigateToProject(null);
+        }else if(!state.projectId){
+          loadHome();
+        }
+      });
       source.addEventListener('task:log',event=>{
         const payload=JSON.parse(event.data);
         state.logChunks[payload.id]=appendLogChunk(state.logChunks[payload.id],payload);

@@ -268,8 +268,9 @@ function createProjectsRouter(deps) {
   }));
 
   router.delete('/:id', asyncHandler(async (req, res) => {
-    projects.deleteProject(req.params.id);
-    res.status(204).end();
+    const result = projects.deleteProject(req.params.id);
+    broadcaster.send('project:deleted', { id: req.params.id });
+    res.json(result);
   }));
 
   router.get('/:id/rules', asyncHandler(async (req, res) => {

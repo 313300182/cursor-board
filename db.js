@@ -461,9 +461,28 @@ function createProjectRepo(db) {
       const project = this.getProject(id);
       if (!project) throw new Error('项目不存在');
       if (project.is_system) throw new Error('系统项目不能删除');
-      const count = db.prepare('SELECT COUNT(*) AS count FROM tasks WHERE project_id = ?').get(id).count;
-      if (count > 0) throw new Error('项目下存在任务，不能删除');
-      db.prepare('DELETE FROM projects WHERE id = ?').run(id);
+      // 正在执行（Agent 进程存活或流水线进行中/待用户确认）的任务不允许连带删除
+      const activeStatuses = [
+        'planning', 'running', 'developing', 'testing', 'committing',
+        'deploying', 'awaiting_input', 'pending_approval',
+      ];
+      const placeholders = activeStatuses.map(() => '?').join(', ');
+      const activeCount = db.prepare(
+        `SELECT COUNT(*) AS count FROM tasks WHERE project_id = ? AND archived = 0 AND status IN (${placeholders})`,
+      ).get(id, ...activeStatuses).count;
+      if (activeCount > 0) {
+        throw new Error('项目下存在正在执行的任务，无法删除，请先等待或终止后再试');
+      }
+      // 归档剩余任务并删除项目，保证「任务全部归档 + 项目移除」原子完成
+      const removeProject = db.transaction((projectId, now) => {
+        const archived = db.prepare(
+          'UPDATE tasks SET archived = 1, archived_at = ? WHERE project_id = ? AND archived = 0',
+        ).run(now, projectId).changes;
+        db.prepare('DELETE FROM projects WHERE id = ?').run(projectId);
+        return archived;
+      });
+      const archivedCount = removeProject(id, new Date().toISOString());
+      return { id, archived: archivedCount };
     },
   };
 }

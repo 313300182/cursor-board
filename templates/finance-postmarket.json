@@ -1,0 +1,10 @@
+{
+  "id": "finance-postmarket",
+  "name": "盘后复盘",
+  "category": "金融",
+  "order": 12,
+  "description": "常驻任务·每交易日收盘后：先拉DB持仓+策略卡+观察池，再跑盘后复盘脚本，结合真实持仓做收益归因、操作复盘与教训沉淀（只分析不下单）",
+  "defaults": { "pipeline": false, "git": false, "complex": true },
+  "variables": [],
+  "prompt": "工作目录:\n{{workdirs_detail}}\n\n任务: 生成【今日盘后复盘】。全程在 portfolio-assistant 工作目录执行, 用其 .venv 的 python; PowerShell 多命令用 ; 分隔, 不要用 &&。\n\n步骤:\n1. 读 portfolio-assistant/.cursor/skills/post-market-review/SKILL.md 与 stock-trading-core.mdc。\n2. 【先拉账户实况·以 DB 为准, 作为本次复盘基准】依次运行:\n   - 当前持仓: .venv\\Scripts\\pa.exe status\n   - 持仓策略卡(六锚点·我的策略锚点): .venv\\Scripts\\pa.exe show-strategy\n   - 观察池(含 trigger1/2/3): .venv\\Scripts\\pa.exe show-watchlist\n   记牢真实持仓(代码/成本/仓位)与观察池标的; 后续复盘必须逐一对应这些真实标的与其六锚点。\n3. 运行盘后脚本: .venv\\Scripts\\python.exe scripts\\post_market_review.py\n4. 结合[账户实况]与[脚本输出], 产出中文盘后复盘, 至少包含:\n   - 大盘与板块当日收盘表现、市场情绪定性\n   - 持仓逐票当日盈亏与收益归因(对照成本/六锚点, 分析涨跌驱动因素)\n   - 当日若有操作: 复盘是否符合纪律/六锚点\n   - 观察池标的当日表现、触发价状态更新(是否触发/临近)\n   - 今日教训与明日计划(对照铁律与教训库)\n\n纪律:\n- 只做分析和复盘记录, 绝不下单、不调用 record_trade、不改持仓。\n- 遵守账户约束。数据缺失如实标注。\n- 结尾给简洁结论与明日关注点。"
+}

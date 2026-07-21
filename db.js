@@ -473,11 +473,21 @@ function createProjectRepo(db) {
       if (activeCount > 0) {
         throw new Error('项目下存在正在执行的任务，无法删除，请先等待或终止后再试');
       }
-      // 归档剩余任务并删除项目，保证「任务全部归档 + 项目移除」原子完成
+      // 归档剩余任务并删除项目，保证「任务全部归档 + 项目移除」原子完成。
+      // 外键约束下项目行不能有残留引用：任务与项目对话改挂到本机项目（保留归档记录），
+      // 项目私有任务类型与常驻任务属项目配置，随项目一并清理。
+      const machine = db.prepare("SELECT id FROM projects WHERE type = 'machine'").get();
+      const fallbackProjectId = machine ? machine.id : null;
       const removeProject = db.transaction((projectId, now) => {
         const archived = db.prepare(
           'UPDATE tasks SET archived = 1, archived_at = ? WHERE project_id = ? AND archived = 0',
         ).run(now, projectId).changes;
+        db.prepare('UPDATE tasks SET project_id = ? WHERE project_id = ?')
+          .run(fallbackProjectId, projectId);
+        db.prepare('UPDATE chat_sessions SET project_id = ? WHERE project_id = ?')
+          .run(fallbackProjectId, projectId);
+        db.prepare('DELETE FROM schedules WHERE project_id = ?').run(projectId);
+        db.prepare('DELETE FROM project_templates WHERE project_id = ?').run(projectId);
         db.prepare('DELETE FROM projects WHERE id = ?').run(projectId);
         return archived;
       });

@@ -1,0 +1,10 @@
+{
+  "id": "finance-premarket",
+  "name": "隔夜外盘+盘前简报",
+  "category": "金融",
+  "order": 10,
+  "description": "常驻任务·每交易日盘前：先拉DB持仓+策略卡+观察池，再跑隔夜外盘+盘前脚本，按六锚点结合真实持仓输出备战清单（只分析不下单）",
+  "defaults": { "pipeline": false, "git": false, "complex": true },
+  "variables": [],
+  "prompt": "工作目录:\n{{workdirs_detail}}\n\n任务: 生成【今日盘前简报】。全程在 portfolio-assistant 工作目录执行, 用其 .venv 的 python; PowerShell 多命令用 ; 分隔, 不要用 &&。\n\n步骤:\n1. 读 portfolio-assistant/.cursor/skills/pre-market-brief/SKILL.md 与 stock-trading-core.mdc(六锚点/铁律), 了解输出规范。\n2. 【先拉账户实况·以 DB 为准, 作为本次分析基准】依次运行:\n   - 当前持仓: .venv\\Scripts\\pa.exe status\n   - 持仓策略卡(六锚点·我的策略锚点): .venv\\Scripts\\pa.exe show-strategy\n   - 观察池(含 trigger1/2/3): .venv\\Scripts\\pa.exe show-watchlist\n   记牢真实持仓(代码/成本/仓位)与观察池标的; 后续分析必须逐一对应这些真实标的与其六锚点, 不得脱离实际持仓空谈。\n3. 运行隔夜外盘: .venv\\Scripts\\python.exe scripts\\overseas_brief.py\n4. 运行盘前脚本: .venv\\Scripts\\python.exe scripts\\pre_market_brief.py\n5. 结合[账户实况]与[脚本输出], 产出中文盘前简报, 至少包含:\n   - 隔夜外盘(美股/韩股/半导体/商品/汇率)对 A 股及我持仓板块的传导判断\n   - 持仓逐票盘前计划(对照每票六锚点: 支撑/压力/止损/目标/仓位/做T纪律)\n   - 观察池标的触发价临近提醒(trigger1/2/3)\n   - 未来事件日历(财报/解禁/宏观)对我持仓与观察池的影响\n   - 今日重点关注与风险提示\n\n纪律:\n- 只做分析和报告, 绝不下单、不调用 record_trade、不修改持仓数据。\n- 遵守账户约束(板块权限/100股整数/T+1/涨跌停)。\n- 数据缺失如实标注, 不编造。\n- 最后给出简洁结论摘要。"
+}

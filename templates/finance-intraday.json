@@ -1,0 +1,10 @@
+{
+  "id": "finance-intraday",
+  "name": "盘中速览",
+  "category": "金融",
+  "order": 11,
+  "description": "常驻任务·交易日盘中一次(10:30)：持仓+观察池+大盘实时快照，按六锚点解读并标异动（含交易日判断，非交易日直接结束）",
+  "defaults": { "pipeline": false, "git": false, "complex": true },
+  "variables": [],
+  "prompt": "工作目录:\n{{workdirs_detail}}\n\n任务: 生成【盘中速览】。全程在 portfolio-assistant 工作目录执行, 用其 .venv 的 python; PowerShell 多命令用 ; 分隔, 不要用 &&。\n\n步骤:\n0. 交易日闸门(必须先做): 确认今天是否为 A 股交易日 —— 用 tushare trade_cal 查 SSE 当天 is_open, 或查最近行情的最新交易日是否等于今天。若为周末或法定节假日(非交易日), 立即结束任务、不产出报告, 只回一句\"今日非交易日, 跳过盘中速览\"。\n1. 读 portfolio-assistant/.cursor/skills/intraday-overview/SKILL.md 与 stock-trading-core.mdc(六锚点/铁律)。\n2. 运行: .venv\\Scripts\\python.exe scripts\\intraday_overview.py\n3. 基于输出产出中文盘中速览:\n   - 大盘(上证/沪深300/中证1000/科创50)与主要板块强弱、量能\n   - 持仓逐票现价/涨跌/距六锚点(支撑/压力/止损/目标)位置, 有无异动\n   - 观察池触发价是否临近或触发\n   - 需要关注/准备的操作提示(仅提示, 不执行)\n\n纪律:\n- 只做分析, 绝不下单、不调用 record_trade、不改持仓。\n- 遵守账户约束(板块权限/100股/T+1/涨跌停)。\n- 异动标红说明原因; 数据缺失如实标注。\n- 结尾给一句话结论(今天盘中是否需要人工介入)。"
+}

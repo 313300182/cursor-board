@@ -210,6 +210,60 @@ test('任意状态任务可归档且默认列表不再返回', () => {
   db.close();
 });
 
+test('删除项目：开启外键约束时归档任务并清理关联数据', () => {
+  const db = new Database(':memory:');
+  db.pragma('foreign_keys = ON');
+  ensureSchema(db);
+  const projects = createProjectRepo(db);
+  const tasks = createTaskRepo(db);
+  const machine = projects.ensureMachineProject();
+  const project = projects.createProject({
+    id: 'to-delete',
+    name: '待删除项目',
+    type: 'normal',
+    workdir: 'D:\\code\\to-delete',
+    created_at: new Date().toISOString(),
+  });
+
+  const now = new Date().toISOString();
+  const makeTask = (id, status) => tasks.createTask({
+    id,
+    project_id: project.id,
+    title: id,
+    template: 'general',
+    variables: {},
+    workdir: project.workdir,
+    status,
+    is_complex: 0,
+    prompt_rendered: 'test',
+    created_at: now,
+  });
+  makeTask('done-1', 'done');
+  makeTask('pending-1', 'pending');
+  const active = makeTask('running-1', 'developing');
+
+  db.prepare(`INSERT INTO chat_sessions (id, project_id, title, workdir, status, created_at, updated_at)
+    VALUES ('chat-1', @pid, '会话', @wd, 'idle', @now, @now)`).run({ pid: project.id, wd: project.workdir, now });
+  db.prepare(`INSERT INTO project_templates (id, project_id, name, prompt, created_at, updated_at)
+    VALUES ('tpl-1', @pid, '私有类型', 'p', @now, @now)`).run({ pid: project.id, now });
+  db.prepare(`INSERT INTO schedules (id, project_id, template_id, name, created_at, updated_at)
+    VALUES ('sch-1', @pid, 'general', '常驻', @now, @now)`).run({ pid: project.id, now });
+
+  assert.throws(() => projects.deleteProject(project.id), /正在执行的任务/);
+
+  tasks.updateStatus(active.id, { status: 'done' });
+  const result = projects.deleteProject(project.id);
+
+  assert.equal(result.archived, 3);
+  assert.equal(projects.getProject(project.id), null);
+  assert.equal(db.prepare('SELECT COUNT(*) AS c FROM tasks WHERE project_id = ?').get(project.id).c, 0);
+  assert.equal(db.prepare('SELECT COUNT(*) AS c FROM tasks WHERE project_id = ? AND archived = 1').get(machine.id).c, 3);
+  assert.equal(db.prepare('SELECT COUNT(*) AS c FROM chat_sessions WHERE project_id = ?').get(machine.id).c, 1);
+  assert.equal(db.prepare('SELECT COUNT(*) AS c FROM project_templates WHERE project_id = ?').get(project.id).c, 0);
+  assert.equal(db.prepare('SELECT COUNT(*) AS c FROM schedules WHERE project_id = ?').get(project.id).c, 0);
+  db.close();
+});
+
 test('规则扫描递归读取 .cursor/rules 下的 mdc 文件', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cursor-board-rules-'));
   const rulesDir = path.join(root, '.cursor', 'rules', 'nested');

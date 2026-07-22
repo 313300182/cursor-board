@@ -768,6 +768,7 @@
       <span id="queueState" class="muted"></span>
       <span id="connState" class="muted">未连接</span>
       <select id="projectSwitcher" class="project-switcher hidden" aria-label="切换项目"></select>
+      <button type="button" id="openPlatformInfoBtn">环境信息</button>
       <button type="button" id="securityBtn" class="hidden">安全设置</button>
     </div>
   </header>
@@ -783,16 +784,6 @@
         <button type="button" id="openCreateProjectBtn" class="primary">新增项目</button>
       </div>
       <div id="projectGrid" class="project-grid"></div>
-      <section class="panel compatibility-panel" aria-labelledby="compatibilityTitle">
-        <div class="compatibility-header">
-          <div>
-            <h2 id="compatibilityTitle">macOS 兼容性</h2>
-            <p class="muted" style="margin:0">已按当前配置整理 Mac 可用项与仍需 Windows 的功能。</p>
-          </div>
-          <span id="platformLabel" class="badge">检查中…</span>
-        </div>
-        <div id="compatibilityList" class="compatibility-list"></div>
-      </section>
     </section>
 
     <section id="projectView" class="project-layout hidden">
@@ -1162,6 +1153,21 @@
       </div>
     </div>
   </div>
+  <div id="platformInfoModal" class="modal-backdrop hidden">
+    <div class="modal-panel modal-wide" role="dialog" aria-modal="true" aria-labelledby="platformInfoTitle">
+      <div class="compatibility-header">
+        <div>
+          <h3 id="platformInfoTitle">环境信息</h3>
+          <p class="muted" style="margin:0">根据当前运行环境与配置扫描出的可用能力。</p>
+        </div>
+        <span id="platformLabel" class="badge">检查中…</span>
+      </div>
+      <div id="compatibilityList" class="compatibility-list"></div>
+      <div class="modal-actions">
+        <button type="button" id="platformInfoCloseBtn">关闭</button>
+      </div>
+    </div>
+  </div>
   <div id="imagePreviewModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="图片预览">
     <div class="image-preview-modal-panel">
       <button type="button" id="imagePreviewCloseBtn" class="image-preview-close" aria-label="关闭图片预览">×</button>
@@ -1282,6 +1288,15 @@
       $('projectSwitcher').classList.add('hidden');
       $('pageTitle').textContent='项目中心';
       await loadHome();
+    }
+
+    function openPlatformInfoModal(){
+      renderPlatformCompatibility();
+      $('platformInfoModal').classList.remove('hidden');
+    }
+
+    function closePlatformInfoModal(){
+      $('platformInfoModal').classList.add('hidden');
     }
 
     async function showProjectView(){
@@ -3920,6 +3935,11 @@
 
     async function startBoard(){
       await bootstrap();
+      $('openPlatformInfoBtn').onclick=openPlatformInfoModal;
+      $('platformInfoCloseBtn').onclick=closePlatformInfoModal;
+      $('platformInfoModal').onclick=(event)=>{
+        if(event.target===$('platformInfoModal'))closePlatformInfoModal();
+      };
       connectSse();
       $('projectSwitcher').onchange=()=>navigateToProject($('projectSwitcher').value);
       $('homeBtn').onclick=(event)=>{

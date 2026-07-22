@@ -25,3 +25,18 @@ test('Windows 盘符白名单会提示 Mac 工作目录尚未配置', () => {
     /\/Users/,
   );
 });
+
+test('环境信息展示检测到的 Node.js 和 npm 版本', () => {
+  const result = getPlatformCompatibility({}, 'win32', {
+    nodeVersion: 'v22.14.0',
+    npmVersion: '10.9.2',
+    npmAvailable: true,
+  });
+
+  assert.deepEqual(result.runtime, {
+    nodeVersion: 'v22.14.0',
+    npmVersion: '10.9.2',
+    npmAvailable: true,
+  });
+  assert.equal(result.items.find((item) => item.id === 'node').detail, 'Node.js v22.14.0 · npm 10.9.2');
+});

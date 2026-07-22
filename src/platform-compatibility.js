@@ -2,22 +2,51 @@
  * Summarize platform-specific support without hiding runtime prerequisites.
  * @author Amadeus
  */
-function getPlatformCompatibility(config, platform = process.platform) {
+const { execFileSync } = require('node:child_process');
+
+function detectRuntimeVersions(platform = process.platform) {
+  const nodeVersion = process.version;
+  const npmCommand = platform === 'win32' ? 'npm.cmd' : 'npm';
+  let npmVersion = '';
+
+  try {
+    npmVersion = execFileSync(npmCommand, ['--version'], {
+      encoding: 'utf8',
+      timeout: 3000,
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  } catch (error) {
+    npmVersion = '';
+  }
+
+  return {
+    nodeVersion,
+    npmVersion,
+    npmAvailable: Boolean(npmVersion),
+  };
+}
+
+function getPlatformCompatibility(config, platform = process.platform, runtime = detectRuntimeVersions(platform)) {
   const allowlist = Array.isArray(config?.security?.workdirAllowlist)
     ? config.security.workdirAllowlist
     : [];
   const hasPosixWorkdir = allowlist.some((item) => String(item || '').trim().startsWith('/'));
+  const nodeDetail = runtime.npmAvailable
+    ? `Node.js ${runtime.nodeVersion} · npm ${runtime.npmVersion}`
+    : `Node.js ${runtime.nodeVersion} · npm 未检测到`;
 
   return {
     current: platform,
     target: 'darwin',
     label: platform === 'darwin' ? 'macOS' : platform === 'win32' ? 'Windows' : platform,
+    runtime,
     items: [
       {
         id: 'node',
-        name: 'Node.js 前台启动',
+        name: 'Node.js / npm 运行时',
         available: true,
-        detail: 'npm start 可用',
+        detail: nodeDetail,
       },
       {
         id: 'agent',
@@ -50,5 +79,6 @@ function getPlatformCompatibility(config, platform = process.platform) {
 }
 
 module.exports = {
+  detectRuntimeVersions,
   getPlatformCompatibility,
 };

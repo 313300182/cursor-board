@@ -2,6 +2,9 @@ const TERMINAL_ERROR_PATTERNS = [
   /^\s*Error:\s*T:\s*\[[^\]]+\]/im,
   /\[(permission_denied|routing_unsupported|authentication_failed|resource_exhausted)\]/i,
   /Cursor Router .+ disabled for your team/i,
+  // Cursor SDK 把连接类错误作为普通消息块返回，格式为 Error: RetriableError: xxx，
+  // 重试仍失败时必须识别为失败，否则会被误判为"已完成"。
+  /^\s*Error:\s*RetriableError:/im,
 ];
 
 const TRANSIENT_CONNECTION_PATTERNS = [
@@ -10,6 +13,9 @@ const TRANSIENT_CONNECTION_PATTERNS = [
   /ETIMEDOUT/i,
   /EPIPE/i,
   /socket hang up/i,
+  // RetriableError（如 Connection stalled）属于可重试连接错误，先重试再判失败。
+  /RetriableError:/i,
+  /Connection stalled/i,
 ];
 
 /**

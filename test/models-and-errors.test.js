@@ -78,6 +78,15 @@ test('ACP 模型不可用错误会被识别', () => {
   );
 });
 
+test('RetriableError: Connection stalled 会被识别为可重试且转任务失败', () => {
+  const summary = 'Error: RetriableError: Connection stalled';
+  assert.equal(isTransientConnectionError(summary), true);
+  assert.throws(
+    () => assertAgentResultSucceeded(summary),
+    /Agent 连接中断，请稍后重试/,
+  );
+});
+
 test('用户终止时 abort 摘要转为友好取消信息', () => {
   const summary = 'Error: T: [aborted] read ECONNRESET';
   assert.throws(

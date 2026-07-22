@@ -94,6 +94,10 @@ function buildTestPrompt(testCommand, workdirs) {
       const label = String(entry.label || '').trim() || entry.path;
       lines.push(`- ${label}：${entry.path}`);
     });
+  } else if (dirs.length === 1) {
+    const entry = dirs[0];
+    const label = String(entry.label || '').trim();
+    lines.push(`本任务的工作目录：${label ? `${label}：${entry.path}` : entry.path}`);
   }
   if (testCommand) {
     lines.push(`请运行测试命令：${testCommand}`);
@@ -105,6 +109,7 @@ function buildTestPrompt(testCommand, workdirs) {
   }
   lines.push(
     '要求：',
+    '- 只在上述本任务工作目录内运行测试；不要进入、读取或测试其他目录/项目（即使它们位于同一磁盘或父目录下）',
     '- 在各相关工作目录执行测试，捕获完整输出',
     '- **必须**在回复末尾单独一行输出结果标记（缺标记会导致流水线无法判定）：',
     '  - 全部通过 → [TEST:PASS]',
@@ -253,11 +258,15 @@ function buildRetryRepairPrompt(error, { taskTitle, taskPrompt, workdirs } = {})
   }
   const dirs = Array.isArray(workdirs) ? workdirs.filter((entry) => entry?.path) : [];
   if (dirs.length > 1) {
-    lines.push('涉及工作目录：');
+    lines.push('涉及工作目录（请仅在这些目录内定位与修复，不要改动或测试其他目录/项目）：');
     dirs.forEach((entry) => {
       const label = String(entry.label || '').trim() || entry.path;
       lines.push(`- ${label}：${entry.path}`);
     });
+  } else if (dirs.length === 1) {
+    const entry = dirs[0];
+    const label = String(entry.label || '').trim();
+    lines.push(`工作目录（请仅在此目录内定位与修复，不要改动或测试其他目录/项目）：${label ? `${label}：${entry.path}` : entry.path}`);
   }
   lines.push(
     '失败原因：',
@@ -272,6 +281,7 @@ function buildRetryRepairPrompt(error, { taskTitle, taskPrompt, workdirs } = {})
   lines.push(
     '请分析并修复导致上述失败的问题。',
     '要求：',
+    '- 只在本任务工作目录范围内定位与修复，不要进入、改动或测试其他目录/项目',
     '- 优先解决与失败原因直接相关的代码/配置/环境问题',
     '- 修复后不要运行部署',
     '- 不要输出 [TEST:PASS] / [TEST:FAIL]（测试阶段会再次执行）',
@@ -307,11 +317,12 @@ function buildDevPromptSuffix(workdirs) {
     '',
     '【流水线说明】',
     '- 当前为开发阶段：完成实现即可',
+    '- 只在本任务工作目录范围内操作，不要进入、读取、修改或测试其他目录/项目（即使它们位于同一磁盘或父目录下）',
     '- 不要运行部署命令',
     '- 不要输出 [TEST:PASS] / [TEST:FAIL]',
   ];
   if (dirs.length > 1) {
-    lines.splice(2, 0, '- 可在以上多个工作目录范围内同步修改（如前后端联动）');
+    lines.splice(3, 0, '- 可在以上多个工作目录范围内同步修改（如前后端联动）');
   }
   lines.push(buildTitlePromptSuffix());
   return lines.join('\n');

@@ -139,6 +139,28 @@ test('buildTestPrompt 多目录时分别测试', () => {
   assert.match(prompt, /前端：D:\\code\\web/);
 });
 
+test('buildTestPrompt 单目录时也列出工作目录并禁止跨目录测试', () => {
+  const prompt = buildTestPrompt('npm test', [{ label: '看板', path: 'D:\\个人开发\\cursor-board' }]);
+  assert.match(prompt, /本任务的工作目录/);
+  assert.match(prompt, /看板：D:\\个人开发\\cursor-board/);
+  assert.match(prompt, /不要进入、读取或测试其他目录\/项目/);
+});
+
+test('appendDevSuffix 单目录时也限制在工作目录内操作', () => {
+  const prompt = appendDevSuffix('hello', [{ label: '看板', path: 'D:\\个人开发\\cursor-board' }]);
+  assert.match(prompt, /只在本任务工作目录范围内操作/);
+});
+
+test('buildRetryRepairPrompt 单目录时列出工作目录并限制范围', () => {
+  const prompt = buildRetryRepairPrompt('Plan 模式未生成可批准的计划', {
+    taskTitle: '修复 Bug',
+    taskPrompt: '工作目录：D:\\个人开发\\cursor-board',
+    workdirs: [{ label: '看板', path: 'D:\\个人开发\\cursor-board' }],
+  });
+  assert.match(prompt, /工作目录（请仅在此目录内定位与修复/);
+  assert.match(prompt, /只在本任务工作目录范围内定位与修复/);
+});
+
 test('buildDeployPrompt 无命令时引导 AI 自动识别', () => {
   const prompt = buildDeployPrompt();
   assert.match(prompt, /package\.json/);

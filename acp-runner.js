@@ -1,5 +1,7 @@
 const { execFileSync, spawn } = require('child_process');
 const readline = require('readline');
+const path = require('path');
+const os = require('os');
 const { buildQuestionResponse, buildPlanResponse } = require('./interactions');
 const {
   assertAgentResultSucceeded,
@@ -83,6 +85,111 @@ function isBoardSelfKillAttempt(text, options = {}) {
     if (hit) return true;
   }
   return false;
+}
+
+const SANDBOX_ESCAPE_REASON = '沙箱越界：访问了工作目录之外的路径';
+
+/**
+ * 把路径归一化为可比较形式（Windows 忽略大小写）。
+ * @author Amadeus
+ */
+function toComparablePath(p) {
+  if (!p) return '';
+  let resolved;
+  try {
+    resolved = path.resolve(String(p));
+  } catch {
+    return '';
+  }
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
+
+/**
+ * 判断 childPath 是否落在 rootPath 目录内（含 root 自身）。入参需已归一化。
+ * @author Amadeus
+ */
+function isPathInside(childPath, rootPath) {
+  if (!childPath || !rootPath) return false;
+  if (childPath === rootPath) return true;
+  const rel = path.relative(rootPath, childPath);
+  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+}
+
+/**
+ * 从任务工作目录推导沙箱根集合（去重、归一化）。
+ * @author Amadeus
+ */
+function resolveSandboxRoots({ workdir, workdirs } = {}) {
+  const roots = new Set();
+  const add = (p) => {
+    const norm = toComparablePath(p);
+    if (norm) roots.add(norm);
+  };
+  if (Array.isArray(workdirs)) {
+    for (const entry of workdirs) {
+      if (typeof entry === 'string') add(entry);
+      else if (entry?.path) add(entry.path);
+    }
+  }
+  if (workdir) add(workdir);
+  return [...roots];
+}
+
+/**
+ * 递归收集对象里的所有字符串值（权限参数是嵌套 JSON，命令/路径散落其中）。
+ * @author Amadeus
+ */
+function collectStringValues(value, acc = [], depth = 0) {
+  if (depth > 8 || acc.length > 5000) return acc;
+  if (typeof value === 'string') {
+    acc.push(value);
+  } else if (Array.isArray(value)) {
+    for (const item of value) collectStringValues(item, acc, depth + 1);
+  } else if (value && typeof value === 'object') {
+    for (const key of Object.keys(value)) collectStringValues(value[key], acc, depth + 1);
+  }
+  return acc;
+}
+
+// 以空白/引号为界提取绝对路径，避免把命令行后续参数吞进路径里。
+const WIN_DRIVE_PATH_RE = /[A-Za-z]:[\\/][^\s"'*?<>|]*/g;
+const UNC_PATH_RE = /\\\\[^\s"'*?<>|]+/g;
+const POSIX_PATH_RE = /\/[^\s"'*?<>|]+/g;
+
+/**
+ * 从单个字符串里提取候选绝对路径。
+ * @author Amadeus
+ */
+function extractAbsolutePaths(text) {
+  const raw = String(text || '');
+  if (!raw) return [];
+  const found = [];
+  const push = (m) => { if (m) for (const hit of m) found.push(hit); };
+  push(raw.match(WIN_DRIVE_PATH_RE));
+  push(raw.match(UNC_PATH_RE));
+  if (process.platform !== 'win32') push(raw.match(POSIX_PATH_RE));
+  return found;
+}
+
+/**
+ * 检查权限请求参数是否试图访问沙箱之外的路径。
+ * @returns {string|null} 命中的越界路径（原始形态），否则 null
+ * @author Amadeus
+ */
+function findSandboxEscape(params, sandboxRoots, benignRoots = []) {
+  const roots = Array.isArray(sandboxRoots) ? sandboxRoots.filter(Boolean) : [];
+  if (!roots.length) return null;
+  const allowRoots = [...roots, ...benignRoots.map(toComparablePath).filter(Boolean)];
+  const strings = collectStringValues(params);
+  for (const str of strings) {
+    for (const rawPath of extractAbsolutePaths(str)) {
+      const norm = toComparablePath(rawPath);
+      if (!norm) continue;
+      const inside = allowRoots.some((root) => isPathInside(norm, root));
+      if (!inside) return rawPath;
+    }
+  }
+  return null;
 }
 
 const MAX_PROMPT_RETRIES = 2;
@@ -271,7 +378,7 @@ class AcpRunner {
     return { queued: Boolean(text || attachments.length), skipTest };
   }
 
-  getPermissionDenialReason(params) {
+  getPermissionDenialReason(params, sandboxRoots = null) {
     const text = JSON.stringify(params || {});
     if (isBoardSelfKillAttempt(text)) {
       return BOARD_SELF_KILL_REASON;
@@ -280,11 +387,26 @@ class AcpRunner {
     if (patterns.some((pattern) => new RegExp(pattern, 'i').test(text))) {
       return 'deny pattern matched';
     }
+    if (this.security.sandboxWorkdirs !== false && Array.isArray(sandboxRoots) && sandboxRoots.length) {
+      const escape = findSandboxEscape(params, sandboxRoots, this.getSandboxBenignRoots());
+      if (escape) {
+        return `${SANDBOX_ESCAPE_REASON}：${escape}`;
+      }
+    }
     return null;
   }
 
-  shouldDenyPermission(params) {
-    return Boolean(this.getPermissionDenialReason(params));
+  /**
+   * 沙箱放行的良性根目录：Agent 自身临时/配置目录，避免误伤内部读写。
+   * @author Amadeus
+   */
+  getSandboxBenignRoots() {
+    const extra = Array.isArray(this.security.sandboxAllowExtra) ? this.security.sandboxAllowExtra : [];
+    return [os.tmpdir(), path.join(os.homedir(), '.cursor'), ...extra];
+  }
+
+  shouldDenyPermission(params, sandboxRoots = null) {
+    return Boolean(this.getPermissionDenialReason(params, sandboxRoots));
   }
 
   async submitInteraction(taskId, input) {
@@ -336,6 +458,7 @@ class AcpRunner {
     return this.withSession({
       taskId,
       workdir,
+      workdirs,
       modelId,
       mode: retryError ? 'agent' : mode,
       resumeSessionId,
@@ -419,6 +542,7 @@ class AcpRunner {
     return this.withSession({
       taskId,
       workdir,
+      workdirs,
       modelId,
       mode: retryError ? 'agent' : (planMode ? 'plan' : 'agent'),
       resumeSessionId,
@@ -594,7 +718,8 @@ class AcpRunner {
     });
   }
 
-  withSession({ taskId, workdir, modelId, mode, onEvent, run, resumeSessionId }) {
+  withSession({ taskId, workdir, workdirs, modelId, mode, onEvent, run, resumeSessionId }) {
+    const sandboxRoots = resolveSandboxRoots({ workdir, workdirs });
     return new Promise((resolve, reject) => {
       let msgId = 1;
       const pending = new Map();
@@ -956,7 +1081,7 @@ class AcpRunner {
             return;
           }
 
-          const denialReason = this.getPermissionDenialReason(msg.params);
+          const denialReason = this.getPermissionDenialReason(msg.params, sandboxRoots);
           if (denialReason) {
             emit('permission', { tool, action: 'denied', reason: denialReason });
             const allowOnce = denialReason !== BOARD_SELF_KILL_REASON;
@@ -1142,3 +1267,7 @@ function normalizeSteerAttachments(raw) {
 module.exports = AcpRunner;
 module.exports.collectBoardProtectedPids = collectBoardProtectedPids;
 module.exports.isBoardSelfKillAttempt = isBoardSelfKillAttempt;
+module.exports.resolveSandboxRoots = resolveSandboxRoots;
+module.exports.findSandboxEscape = findSandboxEscape;
+module.exports.isPathInside = isPathInside;
+module.exports.SANDBOX_ESCAPE_REASON = SANDBOX_ESCAPE_REASON;

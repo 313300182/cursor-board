@@ -83,7 +83,9 @@
       "Stop-Process[\\s\\S]{0,100}-Name\\s+[\"']?node(?:\\.exe)?[\"']?"
     ],
     "autoApprove": true,
-    "autoAcceptPlan": true
+    "autoAcceptPlan": true,
+    "sandboxWorkdirs": true,
+    "sandboxAllowExtra": []
   },
   "queue": {
     "maxConcurrent": 2,

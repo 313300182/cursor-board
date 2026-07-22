@@ -1,5 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
+const path = require('node:path');
+const os = require('node:os');
 
 const AcpRunner = require('../acp-runner');
 const TaskQueue = require('../queue');
@@ -73,6 +75,67 @@ test('shouldDenyPermission 拒绝终止看板自身进程', () => {
     runner.shouldDenyPermission({ toolCall: { title: 'npm test' } }),
     false,
   );
+});
+
+test('resolveSandboxRoots 归一化并去重工作目录', () => {
+  const { resolveSandboxRoots } = AcpRunner;
+  const roots = resolveSandboxRoots({
+    workdir: 'D:\\个人开发\\cursor-board',
+    workdirs: [{ path: 'D:\\个人开发\\cursor-board' }, { path: 'D:\\个人开发\\cursor-board-web' }],
+  });
+  assert.equal(roots.length, 2);
+});
+
+test('findSandboxEscape 命中沙箱外的绝对路径', () => {
+  const { findSandboxEscape, resolveSandboxRoots } = AcpRunner;
+  const roots = resolveSandboxRoots({ workdir: 'D:\\个人开发\\cursor-board' });
+  const params = {
+    toolCall: { rawInput: { command: 'cd /d D:\\个人开发\\other-proj && npm test' } },
+  };
+  assert.ok(findSandboxEscape(params, roots));
+});
+
+test('findSandboxEscape 放行沙箱内路径', () => {
+  const { findSandboxEscape, resolveSandboxRoots } = AcpRunner;
+  const roots = resolveSandboxRoots({ workdir: 'D:\\个人开发\\cursor-board' });
+  const params = {
+    toolCall: { rawInput: { path: 'D:\\个人开发\\cursor-board\\src\\config.js' } },
+  };
+  assert.equal(findSandboxEscape(params, roots), null);
+});
+
+test('getPermissionDenialReason 沙箱拦截跨项目路径', () => {
+  const runner = new AcpRunner({ security: { denyPatterns: [], sandboxWorkdirs: true } });
+  const roots = AcpRunner.resolveSandboxRoots({ workdir: 'D:\\个人开发\\cursor-board' });
+  const params = {
+    toolCall: { title: 'run test', rawInput: { command: 'npm test', cwd: 'D:\\个人开发\\other-proj' } },
+  };
+  const reason = runner.getPermissionDenialReason(params, roots);
+  assert.match(reason, /沙箱越界/);
+});
+
+test('getPermissionDenialReason 沙箱内不拦截', () => {
+  const runner = new AcpRunner({ security: { denyPatterns: [], sandboxWorkdirs: true } });
+  const roots = AcpRunner.resolveSandboxRoots({ workdir: 'D:\\个人开发\\cursor-board' });
+  const params = {
+    toolCall: { title: 'run test', rawInput: { command: 'npm test', cwd: 'D:\\个人开发\\cursor-board' } },
+  };
+  assert.equal(runner.getPermissionDenialReason(params, roots), null);
+});
+
+test('getPermissionDenialReason 关闭沙箱时不检查路径', () => {
+  const runner = new AcpRunner({ security: { denyPatterns: [], sandboxWorkdirs: false } });
+  const roots = AcpRunner.resolveSandboxRoots({ workdir: 'D:\\个人开发\\cursor-board' });
+  const params = { toolCall: { rawInput: { path: 'D:\\个人开发\\other-proj\\x.js' } } };
+  assert.equal(runner.getPermissionDenialReason(params, roots), null);
+});
+
+test('getPermissionDenialReason 放行 Agent 临时目录', () => {
+  const runner = new AcpRunner({ security: { denyPatterns: [], sandboxWorkdirs: true } });
+  const roots = AcpRunner.resolveSandboxRoots({ workdir: 'D:\\个人开发\\cursor-board' });
+  const tmpFile = path.join(os.tmpdir(), 'agent-scratch.txt');
+  const params = { toolCall: { rawInput: { path: tmpFile } } };
+  assert.equal(runner.getPermissionDenialReason(params, roots), null);
 });
 
 test('submitInteraction permission 拒绝后回复 reject-once', async () => {

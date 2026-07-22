@@ -1,8 +1,9 @@
 const fs = require('fs');
 const path = require('path');
-const Database = require('better-sqlite3');
+const { loadBetterSqlite3 } = require('./src/native-dependencies');
 const { normalizePathForComparison } = require('./src/shared/validation');
 
+const Database = loadBetterSqlite3();
 const DATA_DIR = path.join(__dirname, 'data');
 const MAX_LOG_EVENTS_PER_TASK = 2000;
 const MAX_LOG_EVENT_BYTES_PER_TASK = 8 * 1024 * 1024;

@@ -3,22 +3,62 @@
  * @author Amadeus
  */
 const { execFileSync } = require('node:child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+
+function getWindowsNpmInvocation() {
+  const candidates = [];
+  const nodeDir = path.dirname(process.execPath);
+  const localNpmCmd = path.join(nodeDir, 'npm.cmd');
+  const npmExecPath = process.env.npm_execpath;
+
+  if (fs.existsSync(localNpmCmd)) {
+    candidates.push({
+      command: process.env.ComSpec || 'cmd.exe',
+      args: ['/d', '/s', '/c', `"${localNpmCmd}" --version`],
+      options: { windowsVerbatimArguments: true },
+    });
+  }
+  if (npmExecPath && fs.existsSync(npmExecPath)) {
+    candidates.push({
+      command: process.execPath,
+      args: [npmExecPath, '--version'],
+      options: {},
+    });
+  }
+  candidates.push({
+    command: process.env.ComSpec || 'cmd.exe',
+    args: ['/d', '/s', '/c', 'npm.cmd --version'],
+    options: { windowsVerbatimArguments: true },
+  });
+  return candidates;
+}
+
+function readNpmVersion(platform) {
+  const invocations = platform === 'win32'
+    ? getWindowsNpmInvocation()
+    : [{ command: 'npm', args: ['--version'], options: {} }];
+
+  for (const invocation of invocations) {
+    try {
+      const version = execFileSync(invocation.command, invocation.args, {
+        encoding: 'utf8',
+        timeout: 3000,
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'ignore'],
+        ...invocation.options,
+      }).trim();
+      if (version) return version;
+    } catch {
+      // 继续尝试其他 npm 入口，兼容 Windows 服务进程缺少 PATH 的情况。
+    }
+  }
+  return '';
+}
 
 function detectRuntimeVersions(platform = process.platform) {
   const nodeVersion = process.version;
-  const npmCommand = platform === 'win32' ? 'npm.cmd' : 'npm';
-  let npmVersion = '';
-
-  try {
-    npmVersion = execFileSync(npmCommand, ['--version'], {
-      encoding: 'utf8',
-      timeout: 3000,
-      windowsHide: true,
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
-  } catch (error) {
-    npmVersion = '';
-  }
+  const npmVersion = readNpmVersion(platform);
 
   return {
     nodeVersion,

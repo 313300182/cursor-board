@@ -9,21 +9,21 @@ scriptPath = fso.BuildPath(fso.GetParentFolderName(WScript.ScriptFullName), "scr
 tempPath = fso.BuildPath(fso.GetSpecialFolder(2), "cursor-board-start.log")
 command = "cmd.exe /d /c node """ & scriptPath & """ > """ & tempPath & """ 2>&1"
 
-' 隐藏窗口执行启动脚本并等待其退出；脚本会把服务转入后台常驻，随后弹窗告知启动结果。
+' Run the launcher without a visible window and wait for its result.
 exitCode = shell.Run(command, 0, True)
 
 message = ReadUtf8(tempPath)
 If fso.FileExists(tempPath) Then fso.DeleteFile tempPath
 
 If exitCode = 0 Then
-  If message = "" Then message = "Cursor Board 已在后台启动并持续运行。"
-  MsgBox message, vbInformation + vbSystemModal, "Cursor Board 启动成功"
+  If message = "" Then message = "Cursor Board started in the background."
+  MsgBox message, vbInformation + vbSystemModal, "Cursor Board started"
 Else
-  If message = "" Then message = "启动失败，退出码：" & exitCode
-  MsgBox message, vbCritical + vbSystemModal, "Cursor Board 启动失败"
+  If message = "" Then message = "Startup failed. Exit code: " & exitCode
+  MsgBox message, vbCritical + vbSystemModal, "Cursor Board startup failed"
 End If
 
-' 以 UTF-8 读取启动脚本输出，避免中文乱码。
+' Read the launcher output as UTF-8.
 Function ReadUtf8(filePath)
   ReadUtf8 = ""
   If Not fso.FileExists(filePath) Then Exit Function

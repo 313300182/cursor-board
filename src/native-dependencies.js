@@ -17,8 +17,13 @@ function isBetterSqlite3AbiError(error) {
     && /NODE_MODULE_VERSION/i.test(String(error.message || ''));
 }
 
-function getNpmCommand() {
-  return process.platform === 'win32' ? 'npm.cmd' : 'npm';
+function getNpmInvocation() {
+  if (process.platform !== 'win32') {
+    return { command: 'npm', args: [] };
+  }
+  const npmCli = process.env.npm_execpath
+    || path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
+  return { command: process.execPath, args: [npmCli] };
 }
 
 function waitForRebuildLock() {
@@ -69,19 +74,18 @@ function rebuildBetterSqlite3() {
       if (!isBetterSqlite3AbiError(error)) throw error;
     }
 
+    const npm = getNpmInvocation();
     const result = spawnSync(
-      getNpmCommand(),
-      ['rebuild', 'better-sqlite3', '--no-audit', '--no-fund'],
+      npm.command,
+      [...npm.args, 'rebuild', 'better-sqlite3', '--no-audit', '--no-fund'],
       {
         cwd: path.resolve(__dirname, '..'),
         stdio: 'inherit',
-        shell: process.platform === 'win32',
+        shell: false,
         windowsHide: false,
         timeout: REBUILD_TIMEOUT_MS,
         env: {
           ...process.env,
-          // 当前环境无法稳定访问预编译包下载地址，直接使用本机编译工具链。
-          npm_config_build_from_source: 'true',
         },
       },
     );
